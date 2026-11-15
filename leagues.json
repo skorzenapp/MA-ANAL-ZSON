@@ -1,0 +1,366 @@
+{
+ "cups": [
+  {
+   "slug": "uefa.champions",
+   "name": "Şampiyonlar Ligi",
+   "country": "UEFA",
+   "flag": "eu",
+   "available": true,
+   "kind": "cup"
+  },
+  {
+   "slug": "uefa.europa",
+   "name": "Avrupa Ligi",
+   "country": "UEFA",
+   "flag": "eu",
+   "available": true,
+   "kind": "cup"
+  },
+  {
+   "slug": "uefa.europa.conf",
+   "name": "Konferans Ligi",
+   "country": "UEFA",
+   "flag": "eu",
+   "available": true,
+   "kind": "cup"
+  },
+  {
+   "slug": "conmebol.libertadores",
+   "name": "Copa Libertadores",
+   "country": "CONMEBOL",
+   "flag": "un",
+   "available": true,
+   "kind": "cup"
+  },
+  {
+   "slug": "conmebol.sudamericana",
+   "name": "Copa Sudamericana",
+   "country": "CONMEBOL",
+   "flag": "un",
+   "available": true,
+   "kind": "cup"
+  },
+  {
+   "slug": "afc.champions",
+   "name": "AFC Şampiyonlar Ligi Elit",
+   "country": "AFC",
+   "flag": "un",
+   "available": true,
+   "kind": "cup"
+  },
+  {
+   "slug": "uefa.nations",
+   "name": "Uluslar Ligi",
+   "country": "UEFA",
+   "flag": "eu",
+   "available": true,
+   "kind": "intl"
+  },
+  {
+   "slug": "fifa.world",
+   "name": "Dünya Kupası",
+   "country": "FIFA",
+   "flag": "un",
+   "available": true,
+   "kind": "intl"
+  },
+  {
+   "slug": "uefa.euro",
+   "name": "EURO",
+   "country": "UEFA",
+   "flag": "eu",
+   "available": true,
+   "kind": "intl"
+  },
+  {
+   "slug": "conmebol.america",
+   "name": "Copa América",
+   "country": "CONMEBOL",
+   "flag": "un",
+   "available": true,
+   "kind": "intl"
+  }
+ ],
+ "leagues": [
+  {
+   "slug": "tur.1",
+   "name": "Süper Lig",
+   "country": "Türkiye",
+   "flag": "tr",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "tur.2",
+   "name": "1. Lig",
+   "country": "Türkiye",
+   "flag": "tr",
+   "available": false,
+   "kind": "league"
+  },
+  {
+   "slug": "eng.1",
+   "name": "Premier League",
+   "country": "İngiltere",
+   "flag": "gb-eng",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "eng.2",
+   "name": "Championship",
+   "country": "İngiltere",
+   "flag": "gb-eng",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "esp.1",
+   "name": "LaLiga",
+   "country": "İspanya",
+   "flag": "es",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "esp.2",
+   "name": "LaLiga 2",
+   "country": "İspanya",
+   "flag": "es",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "ita.1",
+   "name": "Serie A",
+   "country": "İtalya",
+   "flag": "it",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "ita.2",
+   "name": "Serie B",
+   "country": "İtalya",
+   "flag": "it",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "ger.1",
+   "name": "Bundesliga",
+   "country": "Almanya",
+   "flag": "de",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "ger.2",
+   "name": "2. Bundesliga",
+   "country": "Almanya",
+   "flag": "de",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "fra.1",
+   "name": "Ligue 1",
+   "country": "Fransa",
+   "flag": "fr",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "fra.2",
+   "name": "Ligue 2",
+   "country": "Fransa",
+   "flag": "fr",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "ned.1",
+   "name": "Eredivisie",
+   "country": "Hollanda",
+   "flag": "nl",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "ned.2",
+   "name": "Eerste Divisie",
+   "country": "Hollanda",
+   "flag": "nl",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "por.1",
+   "name": "Liga Portugal",
+   "country": "Portekiz",
+   "flag": "pt",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "bel.1",
+   "name": "Pro League",
+   "country": "Belçika",
+   "flag": "be",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "sco.1",
+   "name": "Premiership",
+   "country": "İskoçya",
+   "flag": "gb-sct",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "gre.1",
+   "name": "Super League",
+   "country": "Yunanistan",
+   "flag": "gr",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "den.1",
+   "name": "Superliga",
+   "country": "Danimarka",
+   "flag": "dk",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "pol.1",
+   "name": "Ekstraklasa",
+   "country": "Polonya",
+   "flag": "pl",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "cze.1",
+   "name": "Chance Liga",
+   "country": "Çekya",
+   "flag": "cz",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "fin.1",
+   "name": "Veikkausliiga",
+   "country": "Finlandiya",
+   "flag": "fi",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "aut.1",
+   "name": "Bundesliga",
+   "country": "Avusturya",
+   "flag": "at",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "sui.1",
+   "name": "Super League",
+   "country": "İsviçre",
+   "flag": "ch",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "swe.1",
+   "name": "Allsvenskan",
+   "country": "İsveç",
+   "flag": "se",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "ksa.1",
+   "name": "Pro League",
+   "country": "Suudi Arabistan",
+   "flag": "sa",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "bra.1",
+   "name": "Série A",
+   "country": "Brezilya",
+   "flag": "br",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "arg.1",
+   "name": "Liga Profesional",
+   "country": "Arjantin",
+   "flag": "ar",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "col.1",
+   "name": "Primera A",
+   "country": "Kolombiya",
+   "flag": "co",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "chi.1",
+   "name": "Primera División",
+   "country": "Şili",
+   "flag": "cl",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "mex.1",
+   "name": "Liga MX",
+   "country": "Meksika",
+   "flag": "mx",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "usa.1",
+   "name": "MLS",
+   "country": "ABD",
+   "flag": "us",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "aus.1",
+   "name": "A-League",
+   "country": "Avustralya",
+   "flag": "au",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "chn.1",
+   "name": "Süper Lig",
+   "country": "Çin",
+   "flag": "cn",
+   "available": true,
+   "kind": "league"
+  },
+  {
+   "slug": "kor.1",
+   "name": "K League 1",
+   "country": "Güney Kore",
+   "flag": "kr",
+   "available": false,
+   "kind": "league"
+  }
+ ]
+}

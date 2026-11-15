@@ -1,0 +1,8 @@
+# Render.com için tek tıkla kurulum (New > Blueprint). Ücretsiz katmanda çalışır.
+services:
+  - type: web
+    name: mac-analiz
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: true
