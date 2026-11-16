@@ -128,26 +128,61 @@ async function training(slug) {
   });
 }
 
+// ---------- kendini ayarlama (yarım ömür / önsel) ----------
+const tuneMem = new Map();
+const tuning = new Map();
+const tuneFail = new Map();
+function ensureTune(slug) {
+  if (tuning.has(slug)) return tuning.get(slug);
+  if (Date.now() - (tuneFail.get(slug) || 0) < 10 * 60000) return Promise.resolve(null);
+  const p = (async () => {
+    const tr = await training(slug);
+    const r = await M.tune(tr.matches, Date.now(), slug);
+    r.ts = Date.now();
+    tuneMem.set(slug, r);
+    U.diskSet('tn', slug, r);
+    return r;
+  })()
+    .catch((e) => { tuneFail.set(slug, Date.now()); U.log('ayar hatası', slug, e.message); return null; })
+    .finally(() => tuning.delete(slug));
+  tuning.set(slug, p);
+  return p;
+}
+function tuneInfo(slug) {
+  let t = tuneMem.get(slug);
+  if (!t) {
+    const c = U.diskGet('tn', slug, 24 * HOUR);
+    if (c.hit && c.d) { t = c.d; tuneMem.set(slug, t); }
+  }
+  if (!t || Date.now() - (t.ts || 0) > 24 * HOUR) ensureTune(slug);
+  return t || null;
+}
+
 const fitCache = new Map();
 async function modelFor(slug, cutoff) {
   const tr = await training(slug);
-  const dayKey = Math.floor(cutoff / (6 * HOUR));
-  const k = `${slug}:${dayKey}`;
+  const tp = tuneInfo(slug);
+  const params = tp ? { halfLife: tp.halfLife, prior: tp.prior } : M.DEFAULT_PARAMS;
+  const k = `${slug}:${Math.floor(cutoff / (6 * HOUR))}:${params.halfLife}:${params.prior}`;
   let f = fitCache.get(k);
   if (!f || f.tr !== tr) {
     if (fitCache.size > 200) fitCache.clear();
-    f = { tr, mdl: M.fit(tr.matches, cutoff) };
+    f = { tr, mdl: M.fit(tr.matches, cutoff, { halfLife: params.halfLife, prior: params.prior }) };
     fitCache.set(k, f);
   }
-  return { mdl: f.mdl, tr };
+  return { mdl: f.mdl, tr, params, tp };
 }
 
 async function predict(slug, id) {
   const rec = await matchRecord(slug, id);
   if (!rec) throw Object.assign(new Error('Maç bulunamadı'), { status: 404 });
+  return predictFromRec(slug, rec);
+}
+
+async function predictFromRec(slug, rec) {
   const done = rec.status.state === 'post';
   const cutoff = done ? Date.parse(rec.date) : Date.now();
-  const { mdl, tr } = await modelFor(slug, cutoff);
+  const { mdl, tr, params, tp } = await modelFor(slug, cutoff);
   if (!mdl.ok) throw Object.assign(new Error('Bu turnuva için yeterli geçmiş maç verisi yok'), { status: 422 });
   const hid = rec.home.id, aid = rec.away.id;
   if (mdl.games(hid) < 1 || mdl.games(aid) < 1) throw Object.assign(new Error('Takımlardan biri için geçmiş maç verisi bulunamadı'), { status: 422 });
@@ -171,8 +206,189 @@ async function predict(slug, id) {
       avgGoals: mdl.avgGoals,
       neutral,
       homeAdv: mdl.ha,
+      halfLife: params.halfLife,
+      prior: params.prior,
+      tuned: !!(tp && tp.tuned),
     },
   };
+}
+
+// ---------- canlı tahmin ----------
+function parseMinute(st) {
+  const name = String(st.name || '');
+  const m = String(st.clock || '').match(/(\d+)/);
+  const base = m ? Number(m[1]) : 0;
+  if (/HALFTIME/.test(name)) return 45;
+  if (/FIRST_HALF/.test(name)) return Math.min(45, base);
+  if (/SECOND_HALF/.test(name)) return Math.min(95, Math.max(45, base));
+  return Math.min(95, base);
+}
+
+async function liveData(slug, id) {
+  const rec = await matchRecord(slug, id);
+  if (!rec) throw Object.assign(new Error('Maç bulunamadı'), { status: 404 });
+  const st = rec.status;
+  if (st.state !== 'in') return { state: st.state, live: null };
+  const { mdl } = await modelFor(slug, Date.now());
+  if (!mdl.ok || mdl.games(rec.home.id) < 1 || mdl.games(rec.away.id) < 1) return { state: 'in', live: null };
+  const r = M.matchup(mdl, rec.home.id, rec.away.id, { neutral: L.NEUTRAL.has(slug) || rec.neutral, comp: slug });
+  const minute = parseMinute(st);
+  const live = M.liveMarkets(r.lambdaHome, r.lambdaAway, minute, rec.home.score || 0, rec.away.score || 0);
+  return { state: 'in', clock: st.clock, live, pre: { home: r.markets.home, draw: r.markets.draw, away: r.markets.away } };
+}
+
+// ---------- iki takımı karşılaştır (aynı lig) ----------
+async function matchupTeams(slug, a, b) {
+  const { mdl } = await modelFor(slug, Date.now());
+  if (!mdl.ok) throw Object.assign(new Error('Bu lig için yeterli geçmiş maç verisi yok'), { status: 422 });
+  if (a === b) throw Object.assign(new Error('İki farklı takım seç'), { status: 400 });
+  if (mdl.games(a) < 1 || mdl.games(b) < 1) throw Object.assign(new Error('Takımlardan biri için geçmiş maç verisi bulunamadı'), { status: 422 });
+  const neutral = L.NEUTRAL.has(slug);
+  const pack = (r) => ({ markets: r.markets, lambdaHome: r.lambdaHome, lambdaAway: r.lambdaAway, matrix: r.matrix });
+  const side = (tid) => ({ att: mdl.att(tid), def: mdl.def(tid), rank: mdl.rank(tid) || mdl.teams, form: mdl.form(tid), games: mdl.games(tid) });
+  return {
+    ab: pack(M.matchup(mdl, a, b, { neutral, comp: slug })),
+    ba: pack(M.matchup(mdl, b, a, { neutral, comp: slug })),
+    teams: { a: side(a), b: side(b) },
+    league_: { teams: mdl.teams, matches: mdl.n, avgGoals: mdl.avgGoals, neutral },
+  };
+}
+
+// ---------- oyuncu olasılıkları (deneysel) ----------
+const PRIOR = {
+  F: { g: 0.28, s: 1.8, t: 0.7, c: 0.12 },
+  M: { g: 0.09, s: 1.0, t: 0.35, c: 0.17 },
+  D: { g: 0.03, s: 0.5, t: 0.15, c: 0.17 },
+  G: { g: 0, s: 0, t: 0, c: 0.04 },
+};
+const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+
+function propsSide(td, lam, ro, lineup) {
+  if (!td) return [];
+  const mc = Math.max(1, td.matchCount || 1);
+  const gf = td.matches.length ? td.matches.reduce((a, m) => a + (m.gf || 0), 0) / td.matches.length : 1.3;
+  const scale = clamp(lam / Math.max(0.4, gf), 0.6, 1.6);
+  const K = 8;
+  const rinfo = new Map();
+  if (ro) for (const p of ro.players) rinfo.set(p.id, p);
+  const rows = [];
+  for (const p of td.players) {
+    const g = posGroup(p.pos);
+    const pr = PRIOR[g];
+    let pPlay;
+    if (lineup) {
+      const ri = rinfo.get(p.id);
+      if (!ri) continue;
+      pPlay = ri.starter ? 0.96 : 0.3;
+    } else {
+      if (p.apps < 2) continue;
+      pPlay = clamp(p.starts / mc + (0.35 * (p.apps - p.starts)) / mc, 0.03, 0.97);
+    }
+    const n = p.apps;
+    rows.push({
+      p, g, pPlay,
+      rg: (p.goals + K * pr.g) / (n + K),
+      rs: (p.shots + K * pr.s) / (n + K),
+      rt: (p.sot + K * pr.t) / (n + K),
+      rc: (p.yc + K * pr.c) / (n + K),
+    });
+  }
+  const wsum = rows.reduce((a, r) => a + r.rg * r.pPlay, 0);
+  return rows
+    .map((r) => {
+      const lg = wsum > 0 ? (lam * r.rg * r.pPlay) / wsum : 0;
+      const ls = r.rs * r.pPlay * scale, lt = r.rt * r.pPlay * scale, lc = r.rc * r.pPlay;
+      return {
+        id: r.p.id, name: r.p.name, jersey: r.p.jersey, pos: POS_TR[r.g], posAbbr: r.g,
+        pPlay: r.pPlay,
+        pGoal: 1 - Math.exp(-lg), pShot: 1 - Math.exp(-ls), pSot: 1 - Math.exp(-lt), pCard: 1 - Math.exp(-lc),
+        eShots: ls, apps: r.p.apps, goals: r.p.goals,
+      };
+    })
+    .filter((x) => x.posAbbr !== 'G')
+    .sort((a, b) => b.pGoal - a.pGoal)
+    .slice(0, 14);
+}
+
+async function propsFor(slug, id) {
+  const rec = await matchRecord(slug, id);
+  if (!rec) throw Object.assign(new Error('Maç bulunamadı'), { status: 404 });
+  const pred = await predictFromRec(slug, rec);
+  const [th, ta] = await Promise.all([teamData(slug, rec.home.id).catch(() => null), teamData(slug, rec.away.id).catch(() => null)]);
+  const lineup = rec.rosters.some((r) => r.players.some((p) => p.starter));
+  const ro = (tid) => rec.rosters.find((r) => r.teamId === tid);
+  return {
+    state: rec.status.state,
+    lineupKnown: lineup,
+    lambdas: { home: pred.lambdaHome, away: pred.lambdaAway },
+    home: { teamId: rec.home.id, name: rec.home.name, players: propsSide(th, pred.lambdaHome, ro(rec.home.id), lineup) },
+    away: { teamId: rec.away.id, name: rec.away.name, players: propsSide(ta, pred.lambdaAway, ro(rec.away.id), lineup) },
+  };
+}
+
+// ---------- günün tablosu ----------
+const todayJobs = new Map();
+async function runToday(j, date, tz, league, refresh) {
+  try {
+    const { events } = await matchesFor(date, league, tz);
+    const prog = refresh ? { total: 0, done: 0 } : j;
+    prog.total = events.length; prog.done = 0;
+    const byLeague = new Map();
+    events.forEach((ev, i) => { if (!byLeague.has(ev.league)) byLeague.set(ev.league, []); byLeague.get(ev.league).push([ev, i]); });
+    const rows = new Array(events.length);
+    await eachLimit([...byLeague.entries()], 3, async ([slug, list]) => {
+      for (const [ev, i] of list) {
+        const row = { id: ev.id, league: ev.league, date: ev.date, status: ev.status, home: ev.home, away: ev.away };
+        try {
+          const rec = await matchRecord(slug, ev.id, { bg: true });
+          if (rec) {
+            const p = await predictFromRec(slug, rec);
+            const mk = p.markets;
+            row.p = { h: mk.home, d: mk.draw, a: mk.away };
+            row.over25 = mk.over['2.5'];
+            row.btts = mk.btts;
+            row.xg = { h: p.lambdaHome, a: p.lambdaAway };
+            row.top = mk.topScores && mk.topScores[0] ? mk.topScores[0].s : null;
+            const pick = mk.home >= mk.draw && mk.home >= mk.away ? 'h' : mk.away >= mk.draw ? 'a' : 'd';
+            row.pick = pick === 'h' ? '1' : pick === 'd' ? 'X' : '2';
+            if (p.market) {
+              row.market = { h: p.market.home, d: p.market.draw, a: p.market.away, provider: p.market.provider, total: p.market.total, overProb: p.market.overProb };
+              row.edge = { h: row.p.h - p.market.home, d: row.p.d - p.market.draw, a: row.p.a - p.market.away };
+              row.pickEdge = row.edge[pick];
+            }
+          }
+        } catch (e) {
+          row.error = e.message;
+        }
+        rows[i] = row;
+        prog.done++;
+      }
+    });
+    j.rows = rows.filter(Boolean);
+    j.status = 'ready';
+    j.at = Date.now();
+    j.refreshing = false;
+  } catch (e) {
+    U.log('günün tablosu hata', e.message);
+    if (refresh) j.refreshing = false;
+    else j.status = 'error';
+  }
+}
+
+function todayTable(date, tz, league) {
+  const key = `${date}:${tz}:${league}`;
+  let j = todayJobs.get(key);
+  if (todayJobs.size > 60) todayJobs.clear();
+  if (!j || j.status === 'error') {
+    j = { status: 'building', done: 0, total: 0, rows: [] };
+    todayJobs.set(key, j);
+    runToday(j, date, tz, league, false);
+  } else if (j.status === 'ready' && !j.refreshing && Date.now() - j.at > 5 * 60000) {
+    j.refreshing = true;
+    runToday(j, date, tz, league, true);
+  }
+  if (j.status === 'ready') return { status: 'ready', rows: j.rows, at: j.at };
+  return { status: j.status, done: j.done, total: j.total, rows: [] };
 }
 
 // ---------- karne ----------
@@ -182,8 +398,10 @@ async function backtestLeague(slug) {
   if (hit && Date.now() - hit.at < 6 * HOUR) return hit.v;
   return U.once('bt:' + slug, async () => {
     const tr = await training(slug);
-    const r = M.backtest(tr.matches, { now: Date.now(), ownComp: slug });
-    const v = { league: slug, pooled: tr.pooled, ...r };
+    const tp = tuneInfo(slug) || (await ensureTune(slug));
+    const params = tp ? { halfLife: tp.halfLife, prior: tp.prior } : M.DEFAULT_PARAMS;
+    const r = await M.backtest(tr.matches, { now: Date.now(), ownComp: slug, params });
+    const v = { league: slug, pooled: tr.pooled, tuning: tp || null, ...r };
     btCache.set(slug, { at: Date.now(), v });
     return v;
   });
@@ -612,6 +830,11 @@ function startIndex() {
       try {
         const tl = await E.teamsListRaw(slug);
         const arr = (tl && tl.sports && tl.sports[0] && tl.sports[0].leagues && tl.sports[0].leagues[0] && tl.sports[0].leagues[0].teams) || [];
+        for (const x of arr) {
+          const t = x.team;
+          if (!t || t.id == null) continue;
+          items.push({ kind: 'team', id: String(t.id), name: t.displayName || t.name, norm: U.norm([t.displayName, t.shortDisplayName, t.name, t.location, t.abbreviation].filter(Boolean).join(' ')), teamId: String(t.id), team: t.displayName || t.name, teamLogo: E.logoOf(t), league: slug, pos: '' });
+        }
         await eachLimit(arr, 5, async (x) => {
           const t = x.team;
           try {
@@ -621,7 +844,7 @@ function startIndex() {
             for (const a of ath) {
               const name = a.displayName || a.fullName;
               if (!name) continue;
-              items.push({ id: String(a.id), name, norm: U.norm(name), teamId: String(t.id), team: t.displayName, teamLogo: E.logoOf(t), league: slug, pos: (a.position && a.position.abbreviation) || '' });
+              items.push({ kind: 'player', id: String(a.id), name, norm: U.norm(name), teamId: String(t.id), team: t.displayName, teamLogo: E.logoOf(t), league: slug, pos: (a.position && a.position.abbreviation) || '' });
             }
           } catch (e) { /* takım atlanır */ }
         });
@@ -641,7 +864,7 @@ function search(q) {
   const nq = U.norm(q);
   if (nq.length < 2) return [];
   const toks = nq.split(' ');
-  const out = [];
+  const teams = [], players = [];
   for (const it of searchIdx.items) {
     if (!toks.every((t) => it.norm.includes(t))) continue;
     let score = 0;
@@ -649,13 +872,15 @@ function search(q) {
     else if (it.norm.startsWith(nq)) score = 80;
     else if (it.norm.split(' ').some((w) => w.startsWith(toks[0]))) score = 60;
     else score = 30;
-    out.push({ it, score: score - it.norm.length * 0.05 });
+    (it.kind === 'team' ? teams : players).push({ it, score: score - it.norm.length * 0.05 });
   }
-  out.sort((a, b) => b.score - a.score);
-  return out.slice(0, 12).map(({ it }) => ({ id: it.id, name: it.name, teamId: it.teamId, team: it.team, teamLogo: it.teamLogo, league: it.league, pos: it.pos }));
+  teams.sort((a, b) => b.score - a.score);
+  players.sort((a, b) => b.score - a.score);
+  const out = teams.slice(0, 4).concat(players).slice(0, 12);
+  return out.map(({ it }) => ({ kind: it.kind, id: it.id, name: it.name, teamId: it.teamId, team: it.team, teamLogo: it.teamLogo, league: it.league, pos: it.pos }));
 }
 
 module.exports = {
-  matchesFor, matchDetail, matchRecord, predict, backtestLeague, backtestSummary, standings, teamData, playerData, matchPlayers,
+  matchesFor, matchDetail, matchRecord, predict, liveData, matchupTeams, propsFor, todayTable, backtestLeague, backtestSummary, standings, teamData, playerData, matchPlayers,
   leadersState, search, startIndex, searchIdx, training, posGroup,
 };

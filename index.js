@@ -13,7 +13,7 @@ const PORT = Number(process.env.PORT || 8080);
 // Arayüz dosyaları: ../public klasörü varsa orada, yoksa (tek klasörlü sürüm) sunucu dosyalarının yanında
 const PUBLIC = fs.existsSync(path.join(__dirname, '..', 'public', 'index.html')) ? path.join(__dirname, '..', 'public') : __dirname;
 // Sadece arayüz dosyaları sunulur (sunucu kodu ve ayar dosyaları asla)
-const ALLOW = /^(?:assets\/[^/]+|index\.html|manifest\.webmanifest|favicon\.png|icon-\d+\.png|apple-touch-icon\.png|index-[\w-]+\.(?:js|css))$/;
+const ALLOW = /^(?:assets\/[^/]+|index\.html|manifest\.webmanifest|favicon\.png|icon-\d+\.png|apple-touch-icon\.png|(?:index|extras)-[\w-]+\.(?:js|css))$/;
 const SLUG = /^[a-z0-9._-]{2,40}$/i;
 const ID = /^[0-9a-z_-]{1,40}$/i;
 
@@ -67,6 +67,18 @@ route(/^\/api\/match\/([^/]+)\/([^/]+)$/, async ([, lg, mid]) => {
 });
 
 route(/^\/api\/predict\/([^/]+)\/([^/]+)$/, async ([, lg, mid]) => ({ data: await S.predict(openLeague(lg), id(mid)) }));
+
+route(/^\/api\/live\/([^/]+)\/([^/]+)$/, async ([, lg, mid]) => ({ data: await S.liveData(openLeague(lg), id(mid)) }));
+
+route(/^\/api\/props\/([^/]+)\/([^/]+)$/, async ([, lg, mid]) => ({ data: await S.propsFor(openLeague(lg), id(mid)) }));
+
+route(/^\/api\/matchup\/([^/]+)\/([^/]+)\/([^/]+)$/, async ([, lg, a, b]) => ({ data: await S.matchupTeams(openLeague(lg), id(a), id(b)) }));
+
+route(/^\/api\/today\/(\d{8})\/([^/]+)$/, async ([, date, lg], q) => {
+  if (lg !== 'all') openLeague(lg);
+  const tz = Math.max(-840, Math.min(840, parseInt(q.get('tz') || '0', 10) || 0));
+  return { data: S.todayTable(date, tz, lg) };
+});
 
 route(/^\/api\/team\/([^/]+)\/([^/]+)$/, async ([, lg, tid]) => {
   const d = await S.teamData(openLeague(lg), id(tid));
@@ -142,7 +154,7 @@ function serveStatic(req, res, url) {
     o = loadFile(f);
     if (!o) return send(req, res, 404, 'Arayüz dosyaları yok (public klasörü)', { 'Content-Type': 'text/plain; charset=utf-8' });
   }
-  const isAsset = /(?:^|\/)index-[\w-]{6,}\.(?:js|css)$/.test(rel);
+  const isAsset = /(?:^|\/)(?:index|extras)-[\w-]{6,}\.(?:js|css)$/.test(rel);
   const h = {
     'Content-Type': MIME[o.ext] || 'application/octet-stream',
     'Cache-Control': isAsset ? 'public, max-age=31536000, immutable' : o.ext === '.html' || p === '/sw.js' ? 'no-cache' : 'public, max-age=86400',
@@ -173,7 +185,7 @@ process.on('unhandledRejection', (e) => U.log('işlenmeyen söz hatası:', e && 
 
 server.listen(PORT, '0.0.0.0', () => {
   U.log(`Maç Analiz hazır: http://localhost:${PORT}  (${L.AVAILABLE.length} açık lig, veri klasörü: ${U.DATA_DIR})`);
-  if (process.env.WARM !== '0') setTimeout(() => S.startIndex(), 5000); // oyuncu arama dizinini arka planda kur
+  if (process.env.WARM !== '0') setTimeout(() => { if (!S.searchIdx.lastTry) S.startIndex(); }, 5000); // oyuncu arama dizinini arka planda kur
 });
 
 // eski önbellek dosyalarını temizle (günde bir)

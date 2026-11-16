@@ -173,7 +173,7 @@ function markets(p) {
     if (i === 0) cs1 += v;
     if (i <= 6 && j <= 6) scores.push({ s: `${i}-${j}`, p: v });
   }
-  for (const l of ['0.5', '1.5', '2.5', '3.5', '4.5']) {
+  for (const l of ['0.5', '1.5', '2.5', '3.5', '4.5', '5.5', '6.5']) {
     const line = Number(l);
     out.over[l] = tot.reduce((a, v, k) => (k > line ? a + v : a), 0);
   }
@@ -204,8 +204,95 @@ function matchup(model, h, a, { neutral = false, comp } = {}) {
   return { lambdaHome: lh, lambdaAway: la, markets: mk, matrix, grid: p };
 }
 
+// ---------- canlı (maç sürerken) ----------
+// Golün ilk yarıda ~%46, ikinci yarıda ~%54 atıldığı varsayımıyla "şu ana kadar oynanan pay"
+function shareDone(m) {
+  if (m <= 0) return 0;
+  if (m <= 45) return (0.46 * m) / 45;
+  return Math.min(0.995, 0.46 + (0.54 * (Math.min(m, 95) - 45)) / 45);
+}
+// lh/la: 90 dakikalık beklenen goller, minute: oynanan dakika, hg/ag: şu anki skor
+function liveMarkets(lh, la, minute, hg, ag) {
+  const rem = Math.max(0.01, 1 - shareDone(minute));
+  const rh = lh * rem, ra = la * rem;
+  const ph = poisPmf(rh, G), pa = poisPmf(ra, G);
+  const p = Array.from({ length: G + 1 }, () => new Array(G + 1).fill(0));
+  let sum = 0;
+  for (let x = 0; x <= G; x++) {
+    for (let y = 0; y <= G; y++) {
+      const i = hg + x, j = ag + y;
+      if (i > G || j > G) continue;
+      const v = ph[x] * pa[y];
+      p[i][j] += v; sum += v;
+    }
+  }
+  if (sum <= 0) p[Math.min(G, hg)][Math.min(G, ag)] = sum = 1;
+  for (let i = 0; i <= G; i++) for (let j = 0; j <= G; j++) p[i][j] /= sum;
+  const none = Math.exp(-(rh + ra));
+  const tot = rh + ra;
+  return {
+    minute, score: { home: hg, away: ag },
+    remaining: { home: rh, away: ra },
+    markets: markets(p),
+    nextGoal: { home: tot > 0 ? ((1 - none) * rh) / tot : 0, away: tot > 0 ? ((1 - none) * ra) / tot : 0, none },
+  };
+}
+
+// ---------- kendini ayarlama ----------
+const tick = () => new Promise((r) => setImmediate(r));
+const DEFAULT_PARAMS = { halfLife: HALF_LIFE_DAYS, prior: 2.5 };
+
+async function evalParams(matches, ownComp, from, to, step, params, minGames = 3) {
+  const own = matches.filter((m) => m.c === ownComp && m.t >= from && m.t < to);
+  let bs = 0, ll = 0, n = 0;
+  for (let s = from; s < to; s += step * DAY) {
+    const block = own.filter((m) => m.t >= s && m.t < s + step * DAY);
+    if (!block.length) continue;
+    await tick();
+    const mdl = fit(matches, s, { halfLife: params.halfLife, prior: params.prior, iters: 40 });
+    if (!mdl.ok) continue;
+    for (const m of block) {
+      if (mdl.games(m.h) < minGames || mdl.games(m.a) < minGames) continue;
+      const mk = matchup(mdl, m.h, m.a, { neutral: m.neutral, comp: m.c }).markets;
+      const res = m.hg > m.ag ? 'h' : m.hg === m.ag ? 'd' : 'a';
+      const pr = { h: mk.home, d: mk.draw, a: mk.away };
+      for (const k of ['h', 'd', 'a']) bs += (pr[k] - (res === k ? 1 : 0)) ** 2;
+      ll -= Math.log(Math.max(1e-6, pr[res]));
+      n++;
+    }
+  }
+  return { n, brier: n ? bs / n : null, logloss: n ? ll / n : null };
+}
+
+// Yarım ömür ve önsel (shrinkage) ayarını geriye dönük testle seçer.
+// Seçim: 300-120 gün önce. Dürüst ölçüm: son 120 gün seçimde kullanılmaz (dışarıda test).
+async function tune(matches, now, ownComp) {
+  const cands = [];
+  for (const halfLife of [90, 150, 240]) for (const prior of [1.5, 2.5, 5]) cands.push({ halfLife, prior });
+  const selFrom = now - 300 * DAY, selTo = now - 120 * DAY;
+  const sel = [];
+  for (const c of cands) sel.push({ c, r: await evalParams(matches, ownComp, selFrom, selTo, 14, c) });
+  const def = sel.find((x) => x.c.halfLife === DEFAULT_PARAMS.halfLife && x.c.prior === DEFAULT_PARAMS.prior);
+  if (!def.r.n || def.r.n < 40) return { ...DEFAULT_PARAMS, tuned: false, reason: 'few', selN: def.r.n };
+  const best = sel.reduce((a, b) => (b.r.brier < a.r.brier ? b : a), def);
+  const holdDef = await evalParams(matches, ownComp, selTo, now, 10, DEFAULT_PARAMS);
+  let tunedOK = false, holdBest = holdDef;
+  if (best !== def && def.r.brier - best.r.brier >= 0.0005) {
+    holdBest = await evalParams(matches, ownComp, selTo, now, 10, best.c);
+    tunedOK = holdBest.brier != null && holdDef.brier != null && holdBest.brier <= holdDef.brier;
+  }
+  const chosen = tunedOK ? best.c : DEFAULT_PARAMS;
+  return {
+    halfLife: chosen.halfLife, prior: chosen.prior, tuned: tunedOK,
+    candidate: { halfLife: best.c.halfLife, prior: best.c.prior },
+    selN: def.r.n, selBrier: { default: def.r.brier, best: best.r.brier },
+    holdN: holdDef.n, holdBrier: { default: holdDef.brier, tuned: holdBest.brier },
+    holdLogloss: { default: holdDef.logloss, tuned: holdBest.logloss },
+  };
+}
+
 // ---------- karne ----------
-function backtest(matches, { now, days = 300, step = 7, ownComp, minGames = 3 } = {}) {
+async function backtest(matches, { now, days = 300, step = 7, ownComp, minGames = 3, params = DEFAULT_PARAMS } = {}) {
   const start = now - days * DAY;
   const own = matches.filter((m) => m.c === ownComp && m.t >= start && m.t < now).sort((a, b) => a.t - b.t);
   const rows = [];
@@ -213,7 +300,8 @@ function backtest(matches, { now, days = 300, step = 7, ownComp, minGames = 3 } 
   for (let s = start; s < now; s += step * DAY) {
     const block = own.filter((m) => m.t >= s && m.t < s + step * DAY);
     if (!block.length) continue;
-    const mdl = fit(matches, s, { iters: 45 });
+    await tick();
+    const mdl = fit(matches, s, { halfLife: params.halfLife, prior: params.prior, iters: 45 });
     if (!mdl.ok) continue;
     for (const m of block) {
       if (mdl.games(m.h) < minGames || mdl.games(m.a) < minGames) continue;
@@ -287,4 +375,4 @@ function backtest(matches, { now, days = 300, step = 7, ownComp, minGames = 3 } 
   };
 }
 
-module.exports = { fit, matchup, markets, grid, backtest, poisPmf, HALF_LIFE_DAYS };
+module.exports = { fit, matchup, markets, grid, backtest, poisPmf, liveMarkets, tune, DEFAULT_PARAMS, HALF_LIFE_DAYS };
