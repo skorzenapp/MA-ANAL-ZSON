@@ -1,0 +1,491 @@
+{
+ "leagues": [
+  {
+   "slug": "eng.3",
+   "name": "League One",
+   "country": "İngiltere",
+   "flag": "gb-eng"
+  },
+  {
+   "slug": "eng.4",
+   "name": "League Two",
+   "country": "İngiltere",
+   "flag": "gb-eng"
+  },
+  {
+   "slug": "eng.5",
+   "name": "National League",
+   "country": "İngiltere",
+   "flag": "gb-eng"
+  },
+  {
+   "slug": "sco.2",
+   "name": "Championship",
+   "country": "İskoçya",
+   "flag": "gb-sct"
+  },
+  {
+   "slug": "rus.1",
+   "name": "Premier Lig",
+   "country": "Rusya",
+   "flag": "ru"
+  },
+  {
+   "slug": "mex.2",
+   "name": "Liga de Expansión",
+   "country": "Meksika",
+   "flag": "mx"
+  },
+  {
+   "slug": "usa.usl.1",
+   "name": "USL Championship",
+   "country": "ABD",
+   "flag": "us"
+  },
+  {
+   "slug": "usa.usl.l1",
+   "name": "USL League One",
+   "country": "ABD",
+   "flag": "us"
+  },
+  {
+   "slug": "arg.2",
+   "name": "Primera Nacional",
+   "country": "Arjantin",
+   "flag": "ar"
+  },
+  {
+   "slug": "arg.3",
+   "name": "Primera B",
+   "country": "Arjantin",
+   "flag": "ar"
+  },
+  {
+   "slug": "bra.2",
+   "name": "Série B",
+   "country": "Brezilya",
+   "flag": "br"
+  },
+  {
+   "slug": "uru.1",
+   "name": "Primera División",
+   "country": "Uruguay",
+   "flag": "uy"
+  },
+  {
+   "slug": "uru.2",
+   "name": "Segunda División",
+   "country": "Uruguay",
+   "flag": "uy"
+  },
+  {
+   "slug": "per.1",
+   "name": "Liga 1",
+   "country": "Peru",
+   "flag": "pe"
+  },
+  {
+   "slug": "par.1",
+   "name": "Primera División",
+   "country": "Paraguay",
+   "flag": "py"
+  },
+  {
+   "slug": "ecu.1",
+   "name": "LigaPro",
+   "country": "Ekvador",
+   "flag": "ec"
+  },
+  {
+   "slug": "ven.1",
+   "name": "Primera División",
+   "country": "Venezuela",
+   "flag": "ve"
+  },
+  {
+   "slug": "bol.1",
+   "name": "Primera División",
+   "country": "Bolivya",
+   "flag": "bo"
+  },
+  {
+   "slug": "hon.1",
+   "name": "Liga Nacional",
+   "country": "Honduras",
+   "flag": "hn"
+  },
+  {
+   "slug": "crc.1",
+   "name": "Primera División",
+   "country": "Kosta Rika",
+   "flag": "cr"
+  },
+  {
+   "slug": "gua.1",
+   "name": "Liga Nacional",
+   "country": "Guatemala",
+   "flag": "gt"
+  },
+  {
+   "slug": "slv.1",
+   "name": "Primera División",
+   "country": "El Salvador",
+   "flag": "sv"
+  },
+  {
+   "slug": "ind.1",
+   "name": "Indian Super League",
+   "country": "Hindistan",
+   "flag": "in"
+  },
+  {
+   "slug": "ind.2",
+   "name": "I-League",
+   "country": "Hindistan",
+   "flag": "in"
+  },
+  {
+   "slug": "rsa.1",
+   "name": "Premier Soccer League",
+   "country": "Güney Afrika",
+   "flag": "za"
+  }
+ ],
+ "cups": [
+  {
+   "slug": "eng.fa",
+   "name": "FA Cup",
+   "country": "İngiltere",
+   "flag": "gb-eng"
+  },
+  {
+   "slug": "eng.league_cup",
+   "name": "Lig Kupası",
+   "country": "İngiltere",
+   "flag": "gb-eng"
+  },
+  {
+   "slug": "eng.trophy",
+   "name": "EFL Trophy",
+   "country": "İngiltere",
+   "flag": "gb-eng"
+  },
+  {
+   "slug": "esp.copa_del_rey",
+   "name": "Kral Kupası",
+   "country": "İspanya",
+   "flag": "es"
+  },
+  {
+   "slug": "esp.super_cup",
+   "name": "Süper Kupa",
+   "country": "İspanya",
+   "flag": "es"
+  },
+  {
+   "slug": "ger.dfb_pokal",
+   "name": "DFB Pokal",
+   "country": "Almanya",
+   "flag": "de"
+  },
+  {
+   "slug": "ger.super_cup",
+   "name": "Süper Kupa",
+   "country": "Almanya",
+   "flag": "de"
+  },
+  {
+   "slug": "ita.coppa_italia",
+   "name": "Coppa Italia",
+   "country": "İtalya",
+   "flag": "it"
+  },
+  {
+   "slug": "ita.super_cup",
+   "name": "Süper Kupa",
+   "country": "İtalya",
+   "flag": "it"
+  },
+  {
+   "slug": "fra.coupe_de_france",
+   "name": "Fransa Kupası",
+   "country": "Fransa",
+   "flag": "fr"
+  },
+  {
+   "slug": "fra.super_cup",
+   "name": "Şampiyonlar Kupası",
+   "country": "Fransa",
+   "flag": "fr"
+  },
+  {
+   "slug": "ned.cup",
+   "name": "KNVB Kupası",
+   "country": "Hollanda",
+   "flag": "nl"
+  },
+  {
+   "slug": "ned.supercup",
+   "name": "Johan Cruijff Schaal",
+   "country": "Hollanda",
+   "flag": "nl"
+  },
+  {
+   "slug": "por.taca.portugal",
+   "name": "Taça de Portugal",
+   "country": "Portekiz",
+   "flag": "pt"
+  },
+  {
+   "slug": "sco.tennents",
+   "name": "İskoçya Kupası",
+   "country": "İskoçya",
+   "flag": "gb-sct"
+  },
+  {
+   "slug": "sco.cis",
+   "name": "Lig Kupası",
+   "country": "İskoçya",
+   "flag": "gb-sct"
+  },
+  {
+   "slug": "sco.challenge",
+   "name": "Challenge Cup",
+   "country": "İskoçya",
+   "flag": "gb-sct"
+  },
+  {
+   "slug": "ksa.kings.cup",
+   "name": "Kral Kupası",
+   "country": "Suudi Arabistan",
+   "flag": "sa"
+  },
+  {
+   "slug": "usa.open",
+   "name": "US Open Cup",
+   "country": "ABD",
+   "flag": "us"
+  },
+  {
+   "slug": "arg.copa",
+   "name": "Copa Argentina",
+   "country": "Arjantin",
+   "flag": "ar"
+  },
+  {
+   "slug": "bra.copa_do_brazil",
+   "name": "Copa do Brasil",
+   "country": "Brezilya",
+   "flag": "br"
+  },
+  {
+   "slug": "chi.copa_chi",
+   "name": "Copa Chile",
+   "country": "Şili",
+   "flag": "cl"
+  },
+  {
+   "slug": "col.copa",
+   "name": "Copa Colombia",
+   "country": "Kolombiya",
+   "flag": "co"
+  },
+  {
+   "slug": "concacaf.champions",
+   "name": "CONCACAF Şampiyonlar Kupası",
+   "country": "CONCACAF",
+   "flag": "un"
+  },
+  {
+   "slug": "uefa.super_cup",
+   "name": "UEFA Süper Kupa",
+   "country": "UEFA",
+   "flag": "eu"
+  }
+ ],
+ "pools": {
+  "eng.fa": [
+   "eng.fa",
+   "eng.league_cup",
+   "eng.trophy",
+   "eng.1",
+   "eng.2",
+   "eng.3",
+   "eng.4",
+   "eng.5"
+  ],
+  "esp.copa_del_rey": [
+   "esp.copa_del_rey",
+   "esp.super_cup",
+   "esp.1",
+   "esp.2"
+  ],
+  "ger.dfb_pokal": [
+   "ger.dfb_pokal",
+   "ger.super_cup",
+   "ger.1",
+   "ger.2"
+  ],
+  "ita.coppa_italia": [
+   "ita.coppa_italia",
+   "ita.super_cup",
+   "ita.1",
+   "ita.2"
+  ],
+  "fra.coupe_de_france": [
+   "fra.coupe_de_france",
+   "fra.super_cup",
+   "fra.1",
+   "fra.2"
+  ],
+  "ned.cup": [
+   "ned.cup",
+   "ned.supercup",
+   "ned.1",
+   "ned.2"
+  ],
+  "por.taca.portugal": [
+   "por.taca.portugal",
+   "por.1"
+  ],
+  "sco.tennents": [
+   "sco.tennents",
+   "sco.cis",
+   "sco.challenge",
+   "sco.1",
+   "sco.2"
+  ],
+  "ksa.kings.cup": [
+   "ksa.kings.cup",
+   "ksa.1"
+  ],
+  "usa.open": [
+   "usa.open",
+   "usa.1",
+   "usa.usl.1",
+   "usa.usl.l1"
+  ],
+  "arg.copa": [
+   "arg.copa",
+   "arg.1",
+   "arg.2",
+   "arg.3"
+  ],
+  "bra.copa_do_brazil": [
+   "bra.copa_do_brazil",
+   "bra.1",
+   "bra.2"
+  ],
+  "chi.copa_chi": [
+   "chi.copa_chi",
+   "chi.1"
+  ],
+  "col.copa": [
+   "col.copa",
+   "col.1"
+  ],
+  "concacaf.champions": [
+   "concacaf.champions",
+   "mex.1",
+   "usa.1",
+   "hon.1",
+   "crc.1",
+   "gua.1",
+   "slv.1"
+  ],
+  "uefa.super_cup": [
+   "uefa.champions",
+   "uefa.europa",
+   "uefa.europa.conf",
+   "uefa.super_cup",
+   "eng.1",
+   "esp.1",
+   "ita.1",
+   "ger.1",
+   "fra.1",
+   "por.1",
+   "ned.1",
+   "tur.1",
+   "bel.1",
+   "sco.1",
+   "gre.1",
+   "den.1",
+   "aut.1",
+   "swe.1",
+   "nor.1",
+   "eng.2"
+  ],
+  "eng.league_cup": [
+   "eng.fa",
+   "eng.league_cup",
+   "eng.trophy",
+   "eng.1",
+   "eng.2",
+   "eng.3",
+   "eng.4",
+   "eng.5"
+  ],
+  "eng.trophy": [
+   "eng.fa",
+   "eng.league_cup",
+   "eng.trophy",
+   "eng.1",
+   "eng.2",
+   "eng.3",
+   "eng.4",
+   "eng.5"
+  ],
+  "esp.super_cup": [
+   "esp.copa_del_rey",
+   "esp.super_cup",
+   "esp.1",
+   "esp.2"
+  ],
+  "ger.super_cup": [
+   "ger.dfb_pokal",
+   "ger.super_cup",
+   "ger.1",
+   "ger.2"
+  ],
+  "ita.super_cup": [
+   "ita.coppa_italia",
+   "ita.super_cup",
+   "ita.1",
+   "ita.2"
+  ],
+  "fra.super_cup": [
+   "fra.coupe_de_france",
+   "fra.super_cup",
+   "fra.1",
+   "fra.2"
+  ],
+  "ned.supercup": [
+   "ned.cup",
+   "ned.supercup",
+   "ned.1",
+   "ned.2"
+  ],
+  "sco.cis": [
+   "sco.tennents",
+   "sco.cis",
+   "sco.challenge",
+   "sco.1",
+   "sco.2"
+  ],
+  "sco.challenge": [
+   "sco.tennents",
+   "sco.cis",
+   "sco.challenge",
+   "sco.1",
+   "sco.2"
+  ]
+ },
+ "neutral": [
+  "esp.super_cup",
+  "ita.super_cup",
+  "uefa.super_cup"
+ ],
+ "close": [
+  "sui.1"
+ ]
+}

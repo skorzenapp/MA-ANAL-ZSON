@@ -1,6 +1,7 @@
 'use strict';
 // Lig listesi (arayüzdeki liste ile aynı) ve havuz tanımları.
 const raw = require('./leagues.json');
+const X = require('./leagues-extra.json'); // sonradan eklenen ligler ve kupalar
 
 const extra = [
   { slug: 'jpn.1', name: 'J1 League', country: 'Japonya', flag: 'jp', available: true, kind: 'league' },
@@ -8,16 +9,18 @@ const extra = [
 ];
 
 // ESPN'de olmayan, eskiden FotMob'dan gelen ligler kapalı
-const OFF = new Set(['pol.1', 'cze.1', 'fin.1', 'tur.2', 'kor.1']);
+const OFF = new Set(['pol.1', 'cze.1', 'fin.1', 'tur.2', 'kor.1', ...X.close]);
 
-const ALL = [...raw.cups, ...raw.leagues.filter((l) => l.slug !== 'kor.1'), ...extra, ...raw.leagues.filter((l) => l.slug === 'kor.1')]
+const xCups = X.cups.map((l) => ({ ...l, available: true, kind: 'cup', domestic: true }));
+const xLeagues = X.leagues.map((l) => ({ ...l, available: true, kind: 'league' }));
+const ALL = [...raw.cups, ...xCups, ...raw.leagues.filter((l) => l.slug !== 'kor.1'), ...extra, ...xLeagues, ...raw.leagues.filter((l) => l.slug === 'kor.1')]
   .map((l) => ({ ...l, available: l.available && !OFF.has(l.slug) }));
 
 const BY = Object.fromEntries(ALL.map((l) => [l.slug, l]));
 const AVAILABLE = ALL.filter((l) => l.available).map((l) => l.slug);
 
 // Tarafsız saha turnuvaları (ev sahibi avantajı yok)
-const NEUTRAL = new Set(['fifa.world', 'uefa.euro', 'conmebol.america']);
+const NEUTRAL = new Set(['fifa.world', 'uefa.euro', 'conmebol.america', ...X.neutral]);
 
 // Kupa ve milli turnuvalarda modeli kurmak için birlikte kullanılan turnuvalar
 const NAT = [
@@ -39,6 +42,7 @@ const POOLS = {
   'conmebol.america': NAT,
 };
 
+Object.assign(POOLS, X.pools);
 function poolOf(slug) {
   return POOLS[slug] || null;
 }

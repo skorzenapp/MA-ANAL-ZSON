@@ -13,7 +13,7 @@ const PORT = Number(process.env.PORT || 8080);
 // Arayüz dosyaları: ../public klasörü varsa orada, yoksa (tek klasörlü sürüm) sunucu dosyalarının yanında
 const PUBLIC = fs.existsSync(path.join(__dirname, '..', 'public', 'index.html')) ? path.join(__dirname, '..', 'public') : __dirname;
 // Sadece arayüz dosyaları sunulur (sunucu kodu ve ayar dosyaları asla)
-const ALLOW = /^(?:assets\/[^/]+|index\.html|manifest\.webmanifest|favicon\.png|icon-\d+\.png|apple-touch-icon\.png|(?:index|extras)-[\w-]+\.(?:js|css))$/;
+const ALLOW = /^(?:assets\/[^/]+|index\.html|manifest\.webmanifest|favicon\.png|icon-\d+\.png|apple-touch-icon\.png|sw\.js|(?:index|extras)-[\w-]+\.(?:js|css))$/;
 const SLUG = /^[a-z0-9._-]{2,40}$/i;
 const ID = /^[0-9a-z_-]{1,40}$/i;
 
@@ -103,6 +103,9 @@ route(/^\/api\/standings\/([^/]+)$/, async ([, lg]) => ({ data: await S.standing
 route(/^\/api\/leaders\/([^/]+)$/, async ([, lg]) => ({ data: S.leadersState(openLeague(lg)) }));
 
 route(/^\/api\/search$/, async (_m, q) => ({ data: S.search(String(q.get('q') || '').slice(0, 60)) }));
+
+route(/^\/api\/league-table$/, async () => ({ data: S.leagueTable() }));
+route(/^\/api\/league\/([^/]+)$/, async ([, lg]) => ({ data: S.leagueDetail(openLeague(lg)) }));
 
 route(/^\/api\/backtest\/([^/]+)$/, async ([, lg]) => ({ data: await S.backtestLeague(openLeague(lg)) }));
 route(/^\/api\/backtest-summary$/, async () => ({ data: S.backtestSummary() }));

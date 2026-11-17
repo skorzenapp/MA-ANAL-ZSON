@@ -11,12 +11,19 @@ Futbol istatistik ve tahmin uygulaması. Tüm dosyalar tek klasörde, telefondan
 - Canlı maçta skor ve dakikaya göre güncellenen olasılıklar
 - Oyuncu olasılıkları (gol, isabetli şut, kart) — deneysel
 - Karne: modelin geçmiş isabeti ve lig bazında kendini ayarlama sonucu
+- Lig profilleri: her ligin ev/beraberlik/deplasman oranı, gol ortalaması, 2.5 üst, KG; ligin korner ve kart ortalamaları, öne çıkan takımlar
+- Trendler ve seriler: takım sayfasında ve maçın Form & H2H sekmesinde "5 maçtır yenilmiyor", "4 maçtır 2.5 üst" gibi seriler, son 5/10 maç oranları
+- Kilit oyuncu eksik uyarısı: maçın Tahmin sekmesinde, takımın en önemli oyuncularından biri sakat veya cezalıysa uyarı
+- Paylaş butonu: maçın tahminini metin ve bağlantı olarak paylaşır (paylaşım menüsü yoksa panoya kopyalar)
+- Günün tablosunda süzgeçler: 2.5 üst, karşılıklı gol, favori olasılığı, piyasadan fark, sadece başlamamış maçlar
+- Hızlı açılış: uygulama telefonda bir kez açıldıktan sonra önbellekten anında açılır, internet yokken bile son görülen maçlar ve takımlar görünür
+- 90'dan fazla turnuva: İngiltere 3-4-5. lig, İskoçya 2. lig, Rusya, Meksika 2, ABD USL, Arjantin 2-3, Brezilya 2, Uruguay, Peru, Paraguay, Ekvador, Venezuela, Bolivya, Honduras, Kosta Rika, Guatemala, El Salvador, Hindistan 1-2, Güney Afrika ve ulusal kupalar (FA Cup, Copa del Rey, Coppa Italia, Fransa ve Almanya kupaları vb.)
 
 ## İnternete açmak (telefon veya bilgisayar)
 1. GitHub'da yeni bir depo aç, bu klasördeki TÜM dosyaları depoya yükle (klasör yok, hepsi yan yana).
 2. render.com → GitHub ile giriş → New + → Blueprint (veya Web Service → Language: Docker → Free) → depoyu seç.
 3. Yeşil "Live" yazısı çıkınca verilen adresi aç. Telefonda "Ana ekrana ekle" ile uygulama gibi kur.
-Güncelleme için: GitHub'da dosyaların üzerine yeni dosyaları yükle (aynı isimdekiler değişir). Eski `index-....js` ve `extras-....css` dosyalarını depodan sil.
+Güncelleme için: GitHub'da dosyaların üzerine yeni dosyaları yükle (aynı isimdekiler değişir). Eski `index-....js` ve `extras-....css` dosyalarını depodan sil (silmesen de çalışır, sadece yer kaplar). Yeni gelen `sw.js` ve `leagues-extra.json` dosyalarını da yüklemeyi unutma.
 
 ## Bilgisayarda çalıştırmak
 Node.js 18+ kur, bu klasörde `npm start` yaz, http://localhost:8080 adresini aç.
@@ -28,6 +35,8 @@ PORT (8080), DATA_DIR (./data), FG_CONCURRENCY (8), BG_CONCURRENCY (6), WARM (0 
 - Veri: ESPN'in herkese açık futbol verisi. Resmi bir API değildir, bazı alanlar değişirse bazı ekranlar boş kalabilir.
 - Tahminler garanti değildir. "Karne" sekmesi modelin geçmişte gerçekte ne kadar tutturduğunu gösterir. Piyasa farkı otomatik olarak "değerli bahis" demek değildir.
 - Hakem verisi yok: ESPN hakem bilgisini vermiyor.
-- Bazı ligler kapalı: Türkiye 1. Lig, Kore, Polonya, Çekya, Finlandiya (ESPN'de veri yok).
+- Bazı ligler kapalı: Türkiye 1. Lig, Kore, İsviçre, Polonya, Çekya, Finlandiya (ESPN'de veri yok ya da boş).
+- Alt ligler ve küçük ülke ligleri: ESPN bazılarında sadece skor verir. Korner, kart ve oyuncu ayrıntısı olmayabilir, o zaman ilgili bölüm boş görünür ya da gizlenir.
+- Önbellek sorun çıkarırsa adresin sonuna `?nosw=1` ekleyip aç: çevrimdışı önbellek temizlenir.
 - Oyuncu olasılıkları basit bir orantı yöntemidir, deneyseldir.
 - Ücretsiz Render planında uygulama bir süre kullanılmazsa uyur, ilk açılış 30-60 saniye sürebilir. Liderler ve Günün tablosu ilk açılışta birkaç dakika veri toplayabilir.

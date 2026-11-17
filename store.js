@@ -20,10 +20,13 @@ const POS_TR = { G: 'Kaleci', D: 'Defans', M: 'Orta saha', F: 'Forvet' };
 
 // ---------- maç listesi ----------
 function dayTtl(dayStr) {
-  const today = U.ymd(new Date());
-  const yest = U.ymd(U.addDays(new Date(), -2));
+  // Bugün (UTC) canlı olabilir: kısa süre. Dün sadece gece yarısına yakın saatlerde canlı olabilir. Yarın ve ötesi sakin.
+  const now = new Date();
+  const today = U.ymd(now), yest = U.ymd(U.addDays(now, -1)), tom = U.ymd(U.addDays(now, 1));
+  if (dayStr === today) return 60000;
+  if (dayStr === yest) return now.getUTCHours() < 8 ? 60000 : 15 * 60000;
+  if (dayStr === tom) return 15 * 60000;
   if (dayStr < yest) return 12 * HOUR;
-  if (dayStr <= U.ymd(U.addDays(new Date(), 1))) return 60000;
   return 30 * 60000;
 }
 
@@ -413,10 +416,10 @@ function backtestSummary() {
   if (btSummary.status !== 'building' && (btSummary.status === 'idle' || stale)) {
     btSummary.status = 'building';
     btSummary.done = 0;
-    btSummary.total = L.AVAILABLE.length;
+    btSummary.total = L.AVAILABLE.filter((x) => !L.BY[x].domestic).length;
     const rows = [];
     (async () => {
-      for (const slug of L.AVAILABLE) {
+      for (const slug of L.AVAILABLE.filter((x) => !L.BY[x].domestic)) {
         try {
           const r = await backtestLeague(slug);
           if (r.n >= 10) rows.push({ league: slug, n: r.n, accuracy: r.accuracy, baseHome: r.baseHome, over25: r.over25, btts: r.btts, exact: r.exact });
@@ -880,7 +883,133 @@ function search(q) {
   return out.map(({ it }) => ({ kind: it.kind, id: it.id, name: it.name, teamId: it.teamId, team: it.team, teamLogo: it.teamLogo, league: it.league, pos: it.pos }));
 }
 
+// ---------- lig profilleri ----------
+const pct = (a, n) => (n ? a / n : null);
+function leagueRates(ms) {
+  const n = ms.length;
+  if (!n) return null;
+  let hw = 0, dr = 0, aw = 0, g = 0, hg = 0, ag = 0, o15 = 0, o25 = 0, o35 = 0, bt = 0, cs = 0, nil = 0;
+  for (const m of ms) {
+    const t = m.hg + m.ag;
+    if (m.hg > m.ag) hw++; else if (m.hg < m.ag) aw++; else dr++;
+    g += t; hg += m.hg; ag += m.ag;
+    if (t > 1) o15++; if (t > 2) o25++; if (t > 3) o35++;
+    if (m.hg > 0 && m.ag > 0) bt++;
+    if (m.hg === 0 || m.ag === 0) cs++;
+    if (t === 0) nil++;
+  }
+  return { n, home: pct(hw, n), draw: pct(dr, n), away: pct(aw, n), goals: g / n, homeGoals: hg / n, awayGoals: ag / n, over15: pct(o15, n), over25: pct(o25, n), over35: pct(o35, n), btts: pct(bt, n), cleanSheet: pct(cs, n), nilnil: pct(nil, n) };
+}
+async function leagueOwn(slug) {
+  const tr = await training(slug);
+  const since = Date.now() - 365 * DAY;
+  const own = tr.matches.filter((m) => m.c === slug && m.t >= since);
+  return { own, all: tr.matches.filter((m) => m.c === slug) };
+}
+
+const lgTable = { status: 'idle', done: 0, total: 0, rows: [], at: 0 };
+function leagueTable() {
+  if (lgTable.status === 'idle') {
+    const c = U.diskGet('lt', 'all', 12 * HOUR);
+    if (c.hit && c.d && c.d.rows && c.d.rows.length) { lgTable.rows = c.d.rows; lgTable.at = c.t; lgTable.status = 'ready'; }
+  }
+  const stale = Date.now() - lgTable.at > 6 * HOUR;
+  if (lgTable.status !== 'building' && (lgTable.status === 'idle' || lgTable.status === 'error' || stale)) {
+    const slugs = L.AVAILABLE.filter((x) => !L.BY[x].domestic);
+    const keep = lgTable.rows;
+    lgTable.status = lgTable.rows.length ? 'ready' : 'building';
+    lgTable.refreshing = true;
+    lgTable.done = 0;
+    lgTable.total = slugs.length;
+    const rows = [];
+    (async () => {
+      for (const slug of slugs) {
+        try {
+          const { own } = await leagueOwn(slug);
+          const r = leagueRates(own);
+          if (r && r.n >= 8) rows.push({ league: slug, ...r });
+        } catch (e) { /* lig atlanır */ }
+        lgTable.done++;
+        if (lgTable.status === 'building') lgTable.rows = rows.slice();
+      }
+      lgTable.rows = rows.length ? rows : keep;
+      lgTable.status = 'ready';
+      lgTable.at = Date.now();
+      lgTable.refreshing = false;
+      if (rows.length) U.diskSet('lt', 'all', { rows });
+    })().catch(() => { lgTable.status = lgTable.rows.length ? 'ready' : 'error'; lgTable.refreshing = false; });
+  }
+  return { status: lgTable.status, done: lgTable.done, total: lgTable.total, rows: lgTable.rows, at: lgTable.at };
+}
+
+const lgDetail = new Map();
+const lgDetailJobs = new Map();
+function leagueDetail(slug) {
+  const hit = lgDetail.get(slug);
+  if (hit && Date.now() - hit.at < 3 * HOUR) return { status: 'ready', ...hit.v };
+  let j = lgDetailJobs.get(slug);
+  if (!j || j.status === 'error') {
+    j = { status: 'building', done: 0, total: 0 };
+    lgDetailJobs.set(slug, j);
+    (async () => {
+      const { own, all } = await leagueOwn(slug);
+      const base = own.length >= 15 ? own : all.slice(-300);
+      const rates = leagueRates(base);
+      // son maçların korner / kart / şut ortalamaları (maç kayıtlarından)
+      const recent = all.slice().sort((a, b) => b.t - a.t).slice(0, 50);
+      j.total = recent.length;
+      const acc = { n: 0, corners: [], yellow: [], red: 0, fouls: [], shots: [], sot: [], possHome: [] };
+      await eachLimit(recent, 6, async (m) => {
+        try {
+          const rec = await matchRecord(slug, m.id, { bg: true });
+          const ts = rec && rec.teamStats;
+          if (ts) {
+            const a = ts[m.h], b = ts[m.a];
+            if (a && b) {
+              const sum = (k) => (n0(a[k]) != null && n0(b[k]) != null ? n0(a[k]) + n0(b[k]) : null);
+              const c = sum('wonCorners'), y = sum('yellowCards'), r = sum('redCards'), f = sum('foulsCommitted'), sh = sum('totalShots'), so = sum('shotsOnTarget');
+              if (c != null) acc.corners.push(c);
+              if (y != null) { acc.yellow.push(y + (r || 0)); acc.red += r || 0; }
+              if (f != null) acc.fouls.push(f);
+              if (sh != null) acc.shots.push(sh);
+              if (so != null) acc.sot.push(so);
+              acc.n++;
+            }
+          }
+        } catch (e) { /* maç atlanır */ }
+        j.done++;
+      });
+      const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+      const rate = (a, line) => (a.length ? a.filter((x) => x > line).length / a.length : null);
+      const stats = acc.n >= 5 ? {
+        n: acc.n,
+        corners: { avg: avg(acc.corners), lines: [8.5, 9.5, 10.5, 11.5].map((l) => ({ line: l, p: rate(acc.corners, l) })) },
+        cards: { avg: avg(acc.yellow), lines: [3.5, 4.5, 5.5].map((l) => ({ line: l, p: rate(acc.yellow, l) })), redPerMatch: acc.red / Math.max(1, acc.yellow.length) },
+        fouls: avg(acc.fouls), shots: avg(acc.shots), sot: avg(acc.sot),
+      } : null;
+      // puan durumundan öne çıkan takımlar
+      let teams = null;
+      try {
+        const st = await standings(slug);
+        const rows = st.groups.flatMap((g) => g.rows).filter((r) => r.gp >= 3);
+        if (rows.length >= 4) {
+          const per = rows.map((r) => ({ teamId: r.teamId, name: r.name, logo: r.logo, gp: r.gp, gfpg: r.gf / r.gp, gapg: r.ga / r.gp, pts: r.pts }));
+          const top = (arr, key, dir) => arr.slice().sort((x, y) => dir * (y[key] - x[key])).slice(0, 3);
+          teams = { bestAttack: top(per, 'gfpg', 1), bestDefense: top(per, 'gapg', -1), mostGoals: top(per.map((r) => ({ ...r, tot: r.gfpg + r.gapg })), 'tot', 1), fewestGoals: top(per.map((r) => ({ ...r, tot: r.gfpg + r.gapg })), 'tot', -1) };
+        }
+      } catch (e) { /* puan durumu yoksa sorun değil */ }
+      const tr = await training(slug);
+      const v = { league: slug, season: null, window: base === own ? '12 ay' : 'tüm kayıtlar', rates, stats, teams, pooled: tr.pooled, at: Date.now() };
+      lgDetail.set(slug, { at: Date.now(), v });
+      j.status = 'ready';
+      lgDetailJobs.delete(slug);
+    })().catch((e) => { U.log('lig profili hata', slug, e.message); j.status = 'error'; j.error = e.message; });
+  }
+  if (j.status === 'error') { lgDetailJobs.delete(slug); return { status: 'error', error: j.error || 'Veri kaynağına ulaşılamadı' }; }
+  return { status: 'building', done: j.done, total: j.total };
+}
+
 module.exports = {
   matchesFor, matchDetail, matchRecord, predict, liveData, matchupTeams, propsFor, todayTable, backtestLeague, backtestSummary, standings, teamData, playerData, matchPlayers,
-  leadersState, search, startIndex, searchIdx, training, posGroup,
+  leadersState, search, startIndex, searchIdx, training, posGroup, leagueTable, leagueDetail,
 };

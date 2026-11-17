@@ -1,6 +1,6 @@
 {
   "name": "mac-analiz",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Maç Analiz: futbol istatistik ve tahmin uygulaması",
   "private": true,
   "engines": { "node": ">=18" },
