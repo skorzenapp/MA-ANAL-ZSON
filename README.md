@@ -17,6 +17,9 @@ Futbol istatistik ve tahmin uygulaması. Tüm dosyalar tek klasörde, telefondan
 - Paylaş butonu: maçın tahminini metin ve bağlantı olarak paylaşır (paylaşım menüsü yoksa panoya kopyalar)
 - Günün tablosunda süzgeçler: 2.5 üst, karşılıklı gol, favori olasılığı, piyasadan fark, sadece başlamamış maçlar
 - Hızlı açılış: uygulama telefonda bir kez açıldıktan sonra önbellekten anında açılır, internet yokken bile son görülen maçlar ve takımlar görünür
+- Daha fazla pazar (Tahmin sekmesinin altı): Asya ve Avrupa handikapı, ilk yarı / ikinci yarı sonucu ve golleri, İY/MS, ilk gol, gol aralığı, tek/çift, maç farkı, maç sonucu + 2.5 ve KG + 2.5 kombineleri. Hepsi adil oranıyla
+- Eksiklere göre ayarlı tahmin: kilit oyuncu eksikse "Ana tahmin / Eksiklerle" karşılaştırması. Etki katsayısı ligin geçmiş maçlarından ölçülür; anlamlı çıkmazsa "doğrulanmadı" etiketiyle gösterilir
+- Karne'de korner ve kart karnesi (her maç sadece öncesindeki verilerle tahmin edilip lig ortalamasıyla kıyaslanır) ve eksik oyuncu etkisi analizi. İlk seferde bir ligin son 260 maçının ayrıntısı okunur, birkaç dakika sürebilir
 - 90'dan fazla turnuva: İngiltere 3-4-5. lig, İskoçya 2. lig, Rusya, Meksika 2, ABD USL, Arjantin 2-3, Brezilya 2, Uruguay, Peru, Paraguay, Ekvador, Venezuela, Bolivya, Honduras, Kosta Rika, Guatemala, El Salvador, Hindistan 1-2, Güney Afrika ve ulusal kupalar (FA Cup, Copa del Rey, Coppa Italia, Fransa ve Almanya kupaları vb.)
 
 ## İnternete açmak (telefon veya bilgisayar)

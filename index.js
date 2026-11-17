@@ -107,6 +107,9 @@ route(/^\/api\/search$/, async (_m, q) => ({ data: S.search(String(q.get('q') ||
 route(/^\/api\/league-table$/, async () => ({ data: S.leagueTable() }));
 route(/^\/api\/league\/([^/]+)$/, async ([, lg]) => ({ data: S.leagueDetail(openLeague(lg)) }));
 
+route(/^\/api\/analysis\/([^/]+)$/, async ([, lg]) => ({ data: S.leagueAnalysis(openLeague(lg)) }));
+route(/^\/api\/predict-adj\/([^/]+)\/([^/]+)$/, async ([, lg, mid]) => ({ data: await S.predictAdj(openLeague(lg), id(mid)) }));
+
 route(/^\/api\/backtest\/([^/]+)$/, async ([, lg]) => ({ data: await S.backtestLeague(openLeague(lg)) }));
 route(/^\/api\/backtest-summary$/, async () => ({ data: S.backtestSummary() }));
 

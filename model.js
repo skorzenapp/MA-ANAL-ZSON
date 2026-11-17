@@ -192,11 +192,80 @@ function markets(p) {
   return out;
 }
 
-function matchup(model, h, a, { neutral = false, comp } = {}) {
+// ---------- daha fazla pazar (handikap, ilk yarı, İY/MS, ilk gol, kombine...) ----------
+// Gol dağılımının %46'sı ilk yarıda, %54'ü ikinci yarıda varsayılır (liveMarkets ile aynı).
+const HALF1 = 0.46;
+function indepGrid(lh, la, k = G) {
+  const ph = poisPmf(lh, k), pa = poisPmf(la, k);
+  const p = [];
+  let sum = 0;
+  for (let i = 0; i <= k; i++) { p[i] = []; for (let j = 0; j <= k; j++) { p[i][j] = ph[i] * pa[j]; sum += p[i][j]; } }
+  for (let i = 0; i <= k; i++) for (let j = 0; j <= k; j++) p[i][j] /= sum;
+  return p;
+}
+function extraMarkets(lh, la, p) {
+  const sumWhere = (f) => { let s = 0; for (let i = 0; i <= G; i++) for (let j = 0; j <= G; j++) if (f(i, j)) s += p[i][j]; return s; };
+  const out = {};
+  // Avrupa handikapı (üç yollu): ev sahibine h gol eklenir
+  out.euro = {};
+  for (const h of [-2, -1, 1, 2]) out.euro[h] = { h: sumWhere((i, j) => i + h > j), d: sumWhere((i, j) => i + h === j), a: sumWhere((i, j) => i + h < j) };
+  // Asya handikapı: iade (push) tam sayı hatlarda olur
+  out.asian = [-2.5, -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2, 2.5].map((line) => ({
+    line, win: sumWhere((i, j) => i + line > j), push: sumWhere((i, j) => i + line === j), lose: sumWhere((i, j) => i + line < j),
+  }));
+  // ilk ve ikinci yarı (bağımsız Poisson)
+  const g1 = indepGrid(lh * HALF1, la * HALF1), g2 = indepGrid(lh * (1 - HALF1), la * (1 - HALF1));
+  const m1 = markets(g1), m2 = markets(g2);
+  const half = (m, l) => ({ home: m.home, draw: m.draw, away: m.away, over: { 0.5: m.over['0.5'], 1.5: m.over['1.5'], 2.5: m.over['2.5'] }, btts: m.btts, lambda: { home: lh * l, away: la * l } });
+  out.half1 = half(m1, HALF1);
+  out.half2 = half(m2, 1 - HALF1);
+  // hangi yarıda daha çok gol
+  const t1 = poisPmf((lh + la) * HALF1, 20), t2 = poisPmf((lh + la) * (1 - HALF1), 20);
+  let first = 0, eq = 0, second = 0;
+  for (let a = 0; a <= 20; a++) for (let b = 0; b <= 20; b++) { const v = t1[a] * t2[b]; if (a > b) first += v; else if (a === b) eq += v; else second += v; }
+  out.moreGoals = { first, equal: eq, second };
+  // İY/MS
+  const K = 8;
+  const a1 = poisPmf(lh * HALF1, K), b1 = poisPmf(la * HALF1, K), a2 = poisPmf(lh * (1 - HALF1), K), b2 = poisPmf(la * (1 - HALF1), K);
+  const sg = (x) => (x > 0 ? '1' : x < 0 ? '2' : 'X');
+  const ht = {};
+  let tot = 0;
+  for (let i = 0; i <= K; i++) for (let j = 0; j <= K; j++) {
+    const v1 = a1[i] * b1[j];
+    for (let k = 0; k <= K; k++) for (let l = 0; l <= K; l++) {
+      const v = v1 * a2[k] * b2[l];
+      const key = sg(i - j) + '/' + sg(i + k - j - l);
+      ht[key] = (ht[key] || 0) + v; tot += v;
+    }
+  }
+  for (const k of Object.keys(ht)) ht[k] /= tot;
+  out.htft = ht;
+  // ilk gol
+  const p00 = p[0][0];
+  const sl = lh + la || 1;
+  out.firstGoal = { home: (1 - p00) * (lh / sl), away: (1 - p00) * (la / sl), none: p00 };
+  // tek / çift, gol aralıkları
+  out.even = sumWhere((i, j) => (i + j) % 2 === 0);
+  out.odd = 1 - out.even;
+  out.bands = [['0-1', 0, 1], ['2-3', 2, 3], ['4-5', 4, 5], ['6+', 6, 99]].map(([label, lo, hi]) => ({ label, p: sumWhere((i, j) => i + j >= lo && i + j <= hi) }));
+  // kombine
+  const res = (i, j) => (i > j ? 'h' : i === j ? 'd' : 'a');
+  out.combo1x2 = {};
+  for (const r of ['h', 'd', 'a']) out.combo1x2[r] = { over: sumWhere((i, j) => res(i, j) === r && i + j > 2.5), under: sumWhere((i, j) => res(i, j) === r && i + j < 2.5) };
+  out.comboBtts = {};
+  for (const y of ['yes', 'no']) out.comboBtts[y] = { over: sumWhere((i, j) => ((i > 0 && j > 0) === (y === 'yes')) && i + j > 2.5), under: sumWhere((i, j) => ((i > 0 && j > 0) === (y === 'yes')) && i + j < 2.5) };
+  // maç farkı
+  const dd = (f) => sumWhere((i, j) => f(i - j));
+  out.margin = [['Ev 3+', dd((d) => d >= 3)], ['Ev 2', dd((d) => d === 2)], ['Ev 1', dd((d) => d === 1)], ['Beraberlik', dd((d) => d === 0)], ['Dep 1', dd((d) => d === -1)], ['Dep 2', dd((d) => d === -2)], ['Dep 3+', dd((d) => d <= -3)]].map(([label, v]) => ({ label, p: v }));
+  out.split = HALF1;
+  return out;
+}
+
+function matchup(model, h, a, { neutral = false, comp, lhMul = 1, laMul = 1 } = {}) {
   const f = comp != null ? model.comp(comp) : 1;
   const ha = neutral ? 1 : model.ha;
-  const lh = model.mu * f * ha * model.att(h) * model.def(a);
-  const la = model.mu * f * model.att(a) * model.def(h);
+  const lh = model.mu * f * ha * model.att(h) * model.def(a) * lhMul;
+  const la = model.mu * f * model.att(a) * model.def(h) * laMul;
   const p = grid(lh, la, model.rho);
   const mk = markets(p);
   const matrix = [];
@@ -375,4 +444,4 @@ async function backtest(matches, { now, days = 300, step = 7, ownComp, minGames 
   };
 }
 
-module.exports = { fit, matchup, markets, grid, backtest, poisPmf, liveMarkets, tune, DEFAULT_PARAMS, HALF_LIFE_DAYS };
+module.exports = { fit, matchup, markets, grid, extraMarkets, backtest, poisPmf, liveMarkets, tune, DEFAULT_PARAMS, HALF_LIFE_DAYS };

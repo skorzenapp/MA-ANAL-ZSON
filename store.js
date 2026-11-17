@@ -4,6 +4,8 @@ const U = require('./util');
 const E = require('./espn');
 const L = require('./leagues');
 const M = require('./model');
+const SP = require('./spmodel');
+const AB = require('./absence');
 
 const DAY = U.DAY;
 const HOUR = 3600000;
@@ -182,7 +184,7 @@ async function predict(slug, id) {
   return predictFromRec(slug, rec);
 }
 
-async function predictFromRec(slug, rec) {
+async function predictFromRec(slug, rec, adj) {
   const done = rec.status.state === 'post';
   const cutoff = done ? Date.parse(rec.date) : Date.now();
   const { mdl, tr, params, tp } = await modelFor(slug, cutoff);
@@ -190,10 +192,11 @@ async function predictFromRec(slug, rec) {
   const hid = rec.home.id, aid = rec.away.id;
   if (mdl.games(hid) < 1 || mdl.games(aid) < 1) throw Object.assign(new Error('Takımlardan biri için geçmiş maç verisi bulunamadı'), { status: 422 });
   const neutral = L.NEUTRAL.has(slug) || rec.neutral;
-  const r = M.matchup(mdl, hid, aid, { neutral, comp: slug });
+  const r = M.matchup(mdl, hid, aid, { neutral, comp: slug, lhMul: adj ? adj.home : 1, laMul: adj ? adj.away : 1 });
   const side = (tid) => ({ att: mdl.att(tid), def: mdl.def(tid), rank: mdl.rank(tid) || mdl.teams, form: mdl.form(tid), games: mdl.games(tid) });
   return {
     markets: r.markets,
+    extra: M.extraMarkets(r.lambdaHome, r.lambdaAway, r.grid),
     lambdaHome: r.lambdaHome,
     lambdaAway: r.lambdaAway,
     matrix: r.matrix,
@@ -1009,7 +1012,124 @@ function leagueDetail(slug) {
   return { status: 'building', done: j.done, total: j.total };
 }
 
+// ---------- lig analizi: korner/kart karnesi + eksik oyuncu etkisi ----------
+const ANALYSIS_N = 260; // her lig için en son bu kadar maçın kaydı okunur (bir kez okunan kayıt diskte kalır)
+const anMem = new Map();
+const anJobs = new Map();
+const tickS = () => new Promise((r) => setImmediate(r));
+
+async function runAnalysis(slug, job) {
+  const tr = await training(slug);
+  const own = tr.matches.filter((m) => m.c === slug).sort((a, b) => b.t - a.t).slice(0, ANALYSIS_N).sort((a, b) => a.t - b.t);
+  job.total = own.length; job.done = 0; job.phase = 'read';
+  const recs = new Array(own.length);
+  let fail = 0;
+  await eachLimit(own.map((m, i) => [m, i]), 6, async ([m, i]) => {
+    try { recs[i] = await matchRecord(slug, m.id, { bg: true }); } catch (e) { fail++; }
+    job.done++;
+  });
+  if (fail > own.length * 0.5) throw new Error('Veri kaynağına ulaşılamadı');
+  job.phase = 'calc';
+  // --- korner / kart ---
+  const spRecs = [];
+  own.forEach((m, i) => {
+    const rec = recs[i];
+    const ts = rec && rec.teamStats;
+    if (!ts || !ts[m.h] || !ts[m.a]) return;
+    const c = n0(ts[m.h].wonCorners), ca = n0(ts[m.a].wonCorners), y = n0(ts[m.h].yellowCards), ya = n0(ts[m.a].yellowCards);
+    if (c == null || ca == null || y == null || ya == null) return;
+    spRecs.push({ t: m.t, h: m.h, a: m.a, sp: { c, ca, y, ya } });
+  });
+  const sp = spRecs.length >= 40 ? SP.backtestSp(spRecs) : { n: spRecs.length, enough: false };
+  // --- eksik oyuncu etkisi: her maç için modelin beklentisini (o güne kadarki verilerle) hesapla ---
+  const tp = tuneInfo(slug);
+  const params = tp ? { halfLife: tp.halfLife, prior: tp.prior } : M.DEFAULT_PARAMS;
+  const rows = [];
+  let withRoster = 0;
+  const items = own.map((m, i) => ({ m, rec: recs[i] })).filter((x) => x.rec && x.rec.rosters && x.rec.rosters.length);
+  withRoster = items.length;
+  let absence = { enough: false, n: 0, rosters: withRoster };
+  if (withRoster >= 60) {
+    const DAYMS = 7 * DAY;
+    const t0 = items[0].m.t;
+    const lam = new Map();
+    for (let s0 = t0 + 21 * DAY; s0 <= items[items.length - 1].m.t + DAYMS; s0 += DAYMS) {
+      const block = items.filter((x) => x.m.t >= s0 && x.m.t < s0 + DAYMS);
+      if (!block.length) continue;
+      await tickS();
+      const mdl = M.fit(tr.matches, s0, { halfLife: params.halfLife, prior: params.prior, iters: 40 });
+      if (!mdl.ok) continue;
+      for (const { m } of block) {
+        if (mdl.games(m.h) < 3 || mdl.games(m.a) < 3) continue;
+        const r = M.matchup(mdl, m.h, m.a, { neutral: m.neutral, comp: m.c });
+        lam.set(m.id, [r.lambdaHome, r.lambdaAway]);
+      }
+    }
+    const feed = items.map(({ m, rec }) => ({ t: m.t, id: m.id, h: m.h, a: m.a, hg: m.hg, ag: m.ag, lh: lam.has(m.id) ? lam.get(m.id)[0] : null, la: lam.has(m.id) ? lam.get(m.id)[1] : null, rosters: rec.rosters }));
+    rows.push(...AB.buildRows(feed));
+    absence = { ...AB.estimate(rows), rosters: withRoster };
+    if (!absence.enough) absence = { enough: false, n: rows.length, rosters: withRoster };
+  }
+  return { league: slug, at: Date.now(), matches: own.length, sp, absence, params };
+}
+
+function leagueAnalysis(slug) {
+  const hit = anMem.get(slug);
+  if (hit && Date.now() - hit.at < 12 * HOUR) return { status: 'ready', ...hit.v };
+  const c = U.diskGet('an', slug, 12 * HOUR);
+  if (c.hit && c.d) { anMem.set(slug, { at: c.t, v: c.d }); return { status: 'ready', ...c.d }; }
+  let j = anJobs.get(slug);
+  if (j && j.status === 'error' && Date.now() - j.at < 5 * 60000) return { status: 'error', error: j.error };
+  if (!j || j.status === 'error') {
+    j = { status: 'building', done: 0, total: 0, phase: 'read', at: Date.now() };
+    anJobs.set(slug, j);
+    runAnalysis(slug, j).then((v) => {
+      anMem.set(slug, { at: Date.now(), v });
+      U.diskSet('an', slug, v);
+      anJobs.delete(slug);
+    }).catch((e) => { U.log('lig analizi hata', slug, e.message); j.status = 'error'; j.error = e.message || 'Hata'; j.at = Date.now(); });
+  }
+  return { status: 'building', done: j.done, total: j.total, phase: j.phase };
+}
+// hesaplanmış analiz varsa verir; yoksa ve istenirse arka planda başlatır (bekletmez)
+function analysisIfReady(slug, start) {
+  const hit = anMem.get(slug);
+  if (hit) return hit.v;
+  const c = U.diskGet('an', slug, 12 * HOUR);
+  if (c.hit && c.d) { anMem.set(slug, { at: c.t, v: c.d }); return c.d; }
+  if (start) leagueAnalysis(slug);
+  return null;
+}
+
+// ---------- eksik oyuncuya göre ayarlı tahmin ----------
+async function predictAdj(slug, id) {
+  const rec = await matchRecord(slug, id);
+  if (!rec) throw Object.assign(new Error('Maç bulunamadı'), { status: 404 });
+  if (rec.status.state !== 'pre') return { applicable: false, state: rec.status.state };
+  const [th, ta] = await Promise.all([teamData(slug, rec.home.id), teamData(slug, rec.away.id)]);
+  if (!th || !ta) return { applicable: false, state: 'pre', reason: 'Takım verisi yok' };
+  const inj = (tid, td) => {
+    const own = (rec.injuries || []).filter((x) => x.teamId === tid);
+    return own.length ? own : td.injuries || [];
+  };
+  const mh = AB.currentMiss(th, inj(rec.home.id, th)), ma = AB.currentMiss(ta, inj(rec.away.id, ta));
+  if (!mh.absent.length && !ma.absent.length) return { applicable: true, any: false };
+  const an = analysisIfReady(slug, true);
+  const ab = an && an.absence;
+  let source = 'prior', reason = 'Bu lig için ölçüm henüz yapılmadı (arka planda hesaplanıyor), varsayılan etki kullanıldı.';
+  let k = AB.DEFAULT_K;
+  if (ab && ab.enough) {
+    if (ab.significant && ab.applied) { source = 'validated'; k = ab.applied; reason = 'Bu ligin ' + ab.n / 2 + ' maçında ölçüldü ve anlamlı bulundu.'; }
+    else { source = 'prior'; reason = 'Bu ligin geçmiş maçlarında etki anlamlı çıkmadı, varsayılan etki gösteriliyor. Sadece bilgi içindir.'; }
+  } else if (an) reason = 'Bu lig için yeterli kadro verisi yok, varsayılan etki kullanıldı.';
+  const f = AB.factors(k, mh, ma);
+  const base = await predictFromRec(slug, rec);
+  const adjd = await predictFromRec(slug, rec, f);
+  const pick = (p) => ({ home: p.markets.home, draw: p.markets.draw, away: p.markets.away, over25: p.markets.over['2.5'], over15: p.markets.over['1.5'], btts: p.markets.btts, top: p.markets.topScores[0] ? p.markets.topScores[0].s : null, lh: p.lambdaHome, la: p.lambdaAway });
+  return { applicable: true, any: true, home: mh, away: ma, factors: f, params: { att: k.att, def: k.def, source, reason }, base: pick(base), adjusted: pick(adjd) };
+}
+
 module.exports = {
   matchesFor, matchDetail, matchRecord, predict, liveData, matchupTeams, propsFor, todayTable, backtestLeague, backtestSummary, standings, teamData, playerData, matchPlayers,
-  leadersState, search, startIndex, searchIdx, training, posGroup, leagueTable, leagueDetail,
+  leadersState, search, startIndex, searchIdx, training, posGroup, leagueTable, leagueDetail, leagueAnalysis, predictAdj,
 };
