@@ -12,7 +12,8 @@ function poisPmf(l, n) {
 }
 
 // matches: [{t, h, a, hg, ag, c, neutral}]  (t: ms, c: turnuva anahtarı)
-function fit(matches, now, { halfLife = HALF_LIFE_DAYS, prior = 2.5, iters = 70 } = {}) {
+// xgW: şut bazlı beklenen gol (m.xh / m.xa) ile gerçek golün karışım oranı. Karışım sadece xh/xa bilinen maçlarda yapılır.
+function fit(matches, now, { halfLife = HALF_LIFE_DAYS, prior = 2.5, iters = 70, xgW = 0 } = {}) {
   const idx = new Map();
   const ids = [];
   const games = [];
@@ -23,6 +24,7 @@ function fit(matches, now, { halfLife = HALF_LIFE_DAYS, prior = 2.5, iters = 70 
   };
   const M = [];
   const comps = new Map();
+  let xUsed = 0;
   for (const m of matches) {
     if (m.t >= now) continue;
     const w = Math.pow(0.5, (now - m.t) / (halfLife * DAY));
@@ -31,7 +33,9 @@ function fit(matches, now, { halfLife = HALF_LIFE_DAYS, prior = 2.5, iters = 70 
     games[h]++; games[a]++;
     let c = comps.get(m.c);
     if (c === undefined) { c = comps.size; comps.set(m.c, c); }
-    M.push({ h, a, hg: m.hg, ag: m.ag, w, c, nu: m.neutral ? 1 : 0, t: m.t, id: m.id });
+    const xw = xgW > 0 && m.xh != null && m.xa != null ? xgW : 0;
+    if (xw) xUsed++;
+    M.push({ h, a, hg: xw ? (1 - xw) * m.hg + xw * m.xh : m.hg, ag: xw ? (1 - xw) * m.ag + xw * m.xa : m.ag, ohg: m.hg, oag: m.ag, w, c, nu: m.neutral ? 1 : 0, t: m.t, id: m.id });
   }
   const n = ids.length;
   const att = new Float64Array(n).fill(1);
@@ -95,11 +99,11 @@ function fit(matches, now, { halfLife = HALF_LIFE_DAYS, prior = 2.5, iters = 70 
   for (let r = -0.2; r <= 0.1001; r += 0.01) {
     let ll = 0;
     for (const m of M) {
-      if (m.hg > 1 || m.ag > 1) continue;
+      if (m.ohg > 1 || m.oag > 1) continue;
       const hf = m.nu ? 1 : ha;
       const lh = mu * fc[m.c] * hf * att[m.h] * def[m.a];
       const la = mu * fc[m.c] * att[m.a] * def[m.h];
-      const t = tau(m.hg, m.ag, lh, la, r);
+      const t = tau(m.ohg, m.oag, lh, la, r);
       if (t <= 0) { ll = -Infinity; break; }
       ll += m.w * Math.log(t);
     }
@@ -110,7 +114,7 @@ function fit(matches, now, { halfLife = HALF_LIFE_DAYS, prior = 2.5, iters = 70 
   const recent = new Map();
   const sorted = M.slice().sort((x, y) => y.t - x.t);
   for (const m of sorted) {
-    for (const [side, own, opp] of [[0, m.hg, m.ag], [1, m.ag, m.hg]]) {
+    for (const [side, own, opp] of [[0, m.ohg, m.oag], [1, m.oag, m.ohg]]) {
       const id = ids[side ? m.a : m.h];
       let arr = recent.get(id);
       if (!arr) { arr = []; recent.set(id, arr); }
@@ -123,7 +127,7 @@ function fit(matches, now, { halfLife = HALF_LIFE_DAYS, prior = 2.5, iters = 70 
   return {
     ok: true,
     n: M.length,
-    mu, ha, rho: bestRho,
+    mu, ha, rho: bestRho, xgW, xUsed,
     att: (id) => (idx.has(id) ? att[idx.get(id)] : 1),
     def: (id) => (idx.has(id) ? def[idx.get(id)] : 1),
     games: (id) => (idx.has(id) ? games[idx.get(id)] : 0),
@@ -203,7 +207,8 @@ function indepGrid(lh, la, k = G) {
   for (let i = 0; i <= k; i++) for (let j = 0; j <= k; j++) p[i][j] /= sum;
   return p;
 }
-function extraMarkets(lh, la, p) {
+function extraMarkets(lh, la, p, share = HALF1) {
+  const H1 = share;
   const sumWhere = (f) => { let s = 0; for (let i = 0; i <= G; i++) for (let j = 0; j <= G; j++) if (f(i, j)) s += p[i][j]; return s; };
   const out = {};
   // Avrupa handikapı (üç yollu): ev sahibine h gol eklenir
@@ -214,19 +219,19 @@ function extraMarkets(lh, la, p) {
     line, win: sumWhere((i, j) => i + line > j), push: sumWhere((i, j) => i + line === j), lose: sumWhere((i, j) => i + line < j),
   }));
   // ilk ve ikinci yarı (bağımsız Poisson)
-  const g1 = indepGrid(lh * HALF1, la * HALF1), g2 = indepGrid(lh * (1 - HALF1), la * (1 - HALF1));
+  const g1 = indepGrid(lh * H1, la * H1), g2 = indepGrid(lh * (1 - H1), la * (1 - H1));
   const m1 = markets(g1), m2 = markets(g2);
   const half = (m, l) => ({ home: m.home, draw: m.draw, away: m.away, over: { 0.5: m.over['0.5'], 1.5: m.over['1.5'], 2.5: m.over['2.5'] }, btts: m.btts, lambda: { home: lh * l, away: la * l } });
-  out.half1 = half(m1, HALF1);
-  out.half2 = half(m2, 1 - HALF1);
+  out.half1 = half(m1, H1);
+  out.half2 = half(m2, 1 - H1);
   // hangi yarıda daha çok gol
-  const t1 = poisPmf((lh + la) * HALF1, 20), t2 = poisPmf((lh + la) * (1 - HALF1), 20);
+  const t1 = poisPmf((lh + la) * H1, 20), t2 = poisPmf((lh + la) * (1 - H1), 20);
   let first = 0, eq = 0, second = 0;
   for (let a = 0; a <= 20; a++) for (let b = 0; b <= 20; b++) { const v = t1[a] * t2[b]; if (a > b) first += v; else if (a === b) eq += v; else second += v; }
   out.moreGoals = { first, equal: eq, second };
   // İY/MS
   const K = 8;
-  const a1 = poisPmf(lh * HALF1, K), b1 = poisPmf(la * HALF1, K), a2 = poisPmf(lh * (1 - HALF1), K), b2 = poisPmf(la * (1 - HALF1), K);
+  const a1 = poisPmf(lh * H1, K), b1 = poisPmf(la * H1, K), a2 = poisPmf(lh * (1 - H1), K), b2 = poisPmf(la * (1 - H1), K);
   const sg = (x) => (x > 0 ? '1' : x < 0 ? '2' : 'X');
   const ht = {};
   let tot = 0;
@@ -257,7 +262,7 @@ function extraMarkets(lh, la, p) {
   // maç farkı
   const dd = (f) => sumWhere((i, j) => f(i - j));
   out.margin = [['Ev 3+', dd((d) => d >= 3)], ['Ev 2', dd((d) => d === 2)], ['Ev 1', dd((d) => d === 1)], ['Beraberlik', dd((d) => d === 0)], ['Dep 1', dd((d) => d === -1)], ['Dep 2', dd((d) => d === -2)], ['Dep 3+', dd((d) => d <= -3)]].map(([label, v]) => ({ label, p: v }));
-  out.split = HALF1;
+  out.split = H1;
   return out;
 }
 
@@ -275,14 +280,14 @@ function matchup(model, h, a, { neutral = false, comp, lhMul = 1, laMul = 1 } = 
 
 // ---------- canlı (maç sürerken) ----------
 // Golün ilk yarıda ~%46, ikinci yarıda ~%54 atıldığı varsayımıyla "şu ana kadar oynanan pay"
-function shareDone(m) {
+function shareDone(m, s1 = 0.46) {
   if (m <= 0) return 0;
-  if (m <= 45) return (0.46 * m) / 45;
-  return Math.min(0.995, 0.46 + (0.54 * (Math.min(m, 95) - 45)) / 45);
+  if (m <= 45) return (s1 * m) / 45;
+  return Math.min(0.995, s1 + ((1 - s1) * (Math.min(m, 95) - 45)) / 45);
 }
 // lh/la: 90 dakikalık beklenen goller, minute: oynanan dakika, hg/ag: şu anki skor
-function liveMarkets(lh, la, minute, hg, ag) {
-  const rem = Math.max(0.01, 1 - shareDone(minute));
+function liveMarkets(lh, la, minute, hg, ag, share = 0.46) {
+  const rem = Math.max(0.01, 1 - shareDone(minute, share));
   const rh = lh * rem, ra = la * rem;
   const ph = poisPmf(rh, G), pa = poisPmf(ra, G);
   const p = Array.from({ length: G + 1 }, () => new Array(G + 1).fill(0));
@@ -318,7 +323,7 @@ async function evalParams(matches, ownComp, from, to, step, params, minGames = 3
     const block = own.filter((m) => m.t >= s && m.t < s + step * DAY);
     if (!block.length) continue;
     await tick();
-    const mdl = fit(matches, s, { halfLife: params.halfLife, prior: params.prior, iters: 40 });
+    const mdl = fit(matches, s, { halfLife: params.halfLife, prior: params.prior, iters: 40, xgW: params.xgW || 0 });
     if (!mdl.ok) continue;
     for (const m of block) {
       if (mdl.games(m.h) < minGames || mdl.games(m.a) < minGames) continue;
@@ -335,6 +340,8 @@ async function evalParams(matches, ownComp, from, to, step, params, minGames = 3
 
 // Yarım ömür ve önsel (shrinkage) ayarını geriye dönük testle seçer.
 // Seçim: 300-120 gün önce. Dürüst ölçüm: son 120 gün seçimde kullanılmaz (dışarıda test).
+// 2. aşama: şut bazlı beklenen gol karışımı (xgW) aynı kuralla denenir: seçimde belirgin iyileşme + dışarıda kötüleşmeme.
+const BR_GAIN = 0.0005;
 async function tune(matches, now, ownComp) {
   const cands = [];
   for (const halfLife of [90, 150, 240]) for (const prior of [1.5, 2.5, 5]) cands.push({ halfLife, prior });
@@ -342,22 +349,56 @@ async function tune(matches, now, ownComp) {
   const sel = [];
   for (const c of cands) sel.push({ c, r: await evalParams(matches, ownComp, selFrom, selTo, 14, c) });
   const def = sel.find((x) => x.c.halfLife === DEFAULT_PARAMS.halfLife && x.c.prior === DEFAULT_PARAMS.prior);
-  if (!def.r.n || def.r.n < 40) return { ...DEFAULT_PARAMS, tuned: false, reason: 'few', selN: def.r.n };
+  if (!def.r.n || def.r.n < 40) return { ...DEFAULT_PARAMS, xgW: 0, tuned: false, reason: 'few', selN: def.r.n, xg: xgTally(matches, ownComp, selFrom, selTo, null) };
   const best = sel.reduce((a, b) => (b.r.brier < a.r.brier ? b : a), def);
   const holdDef = await evalParams(matches, ownComp, selTo, now, 10, DEFAULT_PARAMS);
   let tunedOK = false, holdBest = holdDef;
-  if (best !== def && def.r.brier - best.r.brier >= 0.0005) {
+  if (best !== def && def.r.brier - best.r.brier >= BR_GAIN) {
     holdBest = await evalParams(matches, ownComp, selTo, now, 10, best.c);
     tunedOK = holdBest.brier != null && holdDef.brier != null && holdBest.brier <= holdDef.brier;
   }
   const chosen = tunedOK ? best.c : DEFAULT_PARAMS;
+  const selChosen = tunedOK ? best.r : def.r;
+  const holdChosen = tunedOK ? holdBest : holdDef;
+
+  // ---- 2. aşama: şut karışımı ----
+  const xg = xgTally(matches, ownComp, selFrom, selTo, now);
+  let xgW = 0;
+  if (xg.enough) {
+    const tries = [];
+    for (const w of [0.3, 0.6]) tries.push({ w, r: await evalParams(matches, ownComp, selFrom, selTo, 14, { ...chosen, xgW: w }) });
+    const bx = tries.reduce((a, b) => (b.r.brier < a.r.brier ? b : a));
+    xg.candidateW = bx.w;
+    xg.selBrier = { base: selChosen.brier, xg: bx.r.brier };
+    if (selChosen.brier - bx.r.brier >= BR_GAIN) {
+      const holdX = await evalParams(matches, ownComp, selTo, now, 10, { ...chosen, xgW: bx.w });
+      xg.holdBrier = { base: holdChosen.brier, xg: holdX.brier };
+      xg.holdLogloss = { base: holdChosen.logloss, xg: holdX.logloss };
+      xg.holdN = holdX.n;
+      if (holdX.brier != null && holdChosen.brier != null && holdX.brier <= holdChosen.brier) xgW = bx.w;
+    } else xg.holdBrier = null;
+    xg.adopted = xgW > 0;
+  }
   return {
-    halfLife: chosen.halfLife, prior: chosen.prior, tuned: tunedOK,
+    halfLife: chosen.halfLife, prior: chosen.prior, xgW, tuned: tunedOK,
     candidate: { halfLife: best.c.halfLife, prior: best.c.prior },
     selN: def.r.n, selBrier: { default: def.r.brier, best: best.r.brier },
     holdN: holdDef.n, holdBrier: { default: holdDef.brier, tuned: holdBest.brier },
     holdLogloss: { default: holdDef.logloss, tuned: holdBest.logloss },
+    xg,
   };
+}
+
+// Şut verisinin kapsamı: kendi turnuvadaki maçların kaçında xh/xa var
+function xgTally(matches, ownComp, selFrom, selTo, now) {
+  const own = matches.filter((m) => m.c === ownComp);
+  const withX = own.filter((m) => m.xh != null && m.xa != null);
+  const inSel = withX.filter((m) => m.t >= selFrom && m.t < selTo).length;
+  const out = { coverage: own.length ? withX.length / own.length : 0, nWith: withX.length, selWith: inSel, tested: false, adopted: false };
+  if (now == null) { out.reason = 'few'; return out; }
+  if (withX.length < 120 || inSel < 40) { out.reason = withX.length ? 'few' : 'none'; return out; }
+  out.tested = true; out.enough = true;
+  return out;
 }
 
 // ---------- karne ----------
@@ -370,7 +411,7 @@ async function backtest(matches, { now, days = 300, step = 7, ownComp, minGames 
     const block = own.filter((m) => m.t >= s && m.t < s + step * DAY);
     if (!block.length) continue;
     await tick();
-    const mdl = fit(matches, s, { halfLife: params.halfLife, prior: params.prior, iters: 45 });
+    const mdl = fit(matches, s, { halfLife: params.halfLife, prior: params.prior, iters: 45, xgW: params.xgW || 0 });
     if (!mdl.ok) continue;
     for (const m of block) {
       if (mdl.games(m.h) < minGames || mdl.games(m.a) < minGames) continue;

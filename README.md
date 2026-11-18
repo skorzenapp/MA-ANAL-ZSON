@@ -19,14 +19,18 @@ Futbol istatistik ve tahmin uygulaması. Tüm dosyalar tek klasörde, telefondan
 - Hızlı açılış: uygulama telefonda bir kez açıldıktan sonra önbellekten anında açılır, internet yokken bile son görülen maçlar ve takımlar görünür
 - Daha fazla pazar (Tahmin sekmesinin altı): Asya ve Avrupa handikapı, ilk yarı / ikinci yarı sonucu ve golleri, İY/MS, ilk gol, gol aralığı, tek/çift, maç farkı, maç sonucu + 2.5 ve KG + 2.5 kombineleri. Hepsi adil oranıyla
 - Eksiklere göre ayarlı tahmin: kilit oyuncu eksikse "Ana tahmin / Eksiklerle" karşılaştırması. Etki katsayısı ligin geçmiş maçlarından ölçülür; anlamlı çıkmazsa "doğrulanmadı" etiketiyle gösterilir
-- Karne'de korner ve kart karnesi (her maç sadece öncesindeki verilerle tahmin edilip lig ortalamasıyla kıyaslanır) ve eksik oyuncu etkisi analizi. İlk seferde bir ligin son 260 maçının ayrıntısı okunur, birkaç dakika sürebilir
+- Karne'de korner ve kart karnesi (her maç sadece öncesindeki verilerle tahmin edilip lig ortalamasıyla kıyaslanır) ve eksik oyuncu etkisi analizi. İlk seferde bir ligin son 400 maçının ayrıntısı okunur, birkaç dakika sürebilir
+- Şut bazlı güç (xG benzeri): şut ve isabetli şuttan beklenen gol çıkarılır, modele katılması denenir. Seçimde belirgin iyileşme ve dışarıda (son 120 gün) kötüleşmeme koşulu sağlanmazsa KULLANILMAZ. Karne'de ve Model ayarı panelinde sonucu görürsün
+- Günün korner ve kart tablosu (Günün tablosunun üstündeki "Korner ve kart" sekmesi): bugünkü tüm maçlar için beklenen korner/kart ve çizgi olasılıkları, lige ve olasılığa göre süzgeç, sıralama. İlk açılışta takımların son maçları okunur, satırlar geldikçe görünür
+- İlk yarı payı: gollerin kaçının ilk yarıda atıldığı ligden ölçülür (varsayılan %46 yerine). Karne'de "İlk yarı payı ve pazar karnesi": ilk yarı, İY/MS, maç farkı, gol aralığı, handikap, ilk gol, tek/çift pazarları geçmiş maçlarda kalibrasyon ve "Doğrulandı / farkı anlamlı değil" kararıyla
+- Dinlenme ve maç yoğunluğu: son maçından 3,6 günden az dinlenen takımın gol beklentisi değişiyor mu ölçülür (lig, yerel kupa ve Avrupa/kıta kupası maçları dahil). Anlamlıysa (kendi ligi ya da birleşik ölçüm) ayarlı tahmine katılır, değilse sadece bilgi olarak gösterilir
 - 90'dan fazla turnuva: İngiltere 3-4-5. lig, İskoçya 2. lig, Rusya, Meksika 2, ABD USL, Arjantin 2-3, Brezilya 2, Uruguay, Peru, Paraguay, Ekvador, Venezuela, Bolivya, Honduras, Kosta Rika, Guatemala, El Salvador, Hindistan 1-2, Güney Afrika ve ulusal kupalar (FA Cup, Copa del Rey, Coppa Italia, Fransa ve Almanya kupaları vb.)
 
 ## İnternete açmak (telefon veya bilgisayar)
 1. GitHub'da yeni bir depo aç, bu klasördeki TÜM dosyaları depoya yükle (klasör yok, hepsi yan yana).
 2. render.com → GitHub ile giriş → New + → Blueprint (veya Web Service → Language: Docker → Free) → depoyu seç.
 3. Yeşil "Live" yazısı çıkınca verilen adresi aç. Telefonda "Ana ekrana ekle" ile uygulama gibi kur.
-Güncelleme için: GitHub'da dosyaların üzerine yeni dosyaları yükle (aynı isimdekiler değişir). Eski `index-....js` ve `extras-....css` dosyalarını depodan sil (silmesen de çalışır, sadece yer kaplar). Yeni gelen `sw.js` ve `leagues-extra.json` dosyalarını da yüklemeyi unutma.
+Güncelleme için: GitHub'da dosyaların üzerine yeni dosyaları yükle (aynı isimdekiler değişir). Eski `index-....js` ve `extras-....css` dosyalarını depodan sil (silmesen de çalışır, sadece yer kaplar). Yeni gelen dosyaları da yüklemeyi unutma: `xg.js`, `halves.js`, `rest.js` (yeni), ayrıca `store.js`, `model.js`, `spmodel.js`, `index.js`, `index.html`, `sw.js` ve yeni `index-....js` / `extras-....css`.
 
 ## Bilgisayarda çalıştırmak
 Node.js 18+ kur, bu klasörde `npm start` yaz, http://localhost:8080 adresini aç.

@@ -80,6 +80,12 @@ route(/^\/api\/today\/(\d{8})\/([^/]+)$/, async ([, date, lg], q) => {
   return { data: S.todayTable(date, tz, lg) };
 });
 
+route(/^\/api\/sp-today\/(\d{8})\/([^/]+)$/, async ([, date, lg], q) => {
+  if (lg !== 'all') openLeague(lg);
+  const tz = Math.max(-840, Math.min(840, parseInt(q.get('tz') || '0', 10) || 0));
+  return { data: S.spToday(date, tz, lg) };
+});
+
 route(/^\/api\/team\/([^/]+)\/([^/]+)$/, async ([, lg, tid]) => {
   const d = await S.teamData(openLeague(lg), id(tid));
   must(d, 404, 'Takım bulunamadı');

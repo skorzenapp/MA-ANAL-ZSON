@@ -54,8 +54,8 @@ function expected(homeList, awayList) {
   const yh = (f(i.yFor, i.n, c) + f(a.yAg, a.n, c)) / 2, ya = (f(a.yFor, a.n, c) + f(i.yAg, i.n, c)) / 2;
   const rc = dispersion(all.map((q) => q.c + q.ca)), ry = dispersion(all.map((q) => q.y + q.ya));
   return {
-    corners: { t: ch + ca, total: nbPmf(ch + ca, rc, 40) },
-    cards: { t: yh + ya, total: nbPmf(yh + ya, ry, 25) },
+    corners: { t: ch + ca, home: ch, away: ca, total: nbPmf(ch + ca, rc, 40) },
+    cards: { t: yh + ya, home: yh, away: ya, total: nbPmf(yh + ya, ry, 25) },
     base: { corners: { mean: u * 2, ratio: rc }, cards: { mean: c * 2, ratio: ry } },
   };
 }
