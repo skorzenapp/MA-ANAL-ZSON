@@ -117,6 +117,9 @@ function normEvent(ev, slug) {
   const ac = cs.find((c) => c.homeAway === 'away') || cs[1];
   if (!hc || !ac) return null;
   const venue = comp.venue || {};
+  // iki maçlı tur bilgisi (ESPN: leg, series) ve tur adı (season.slug)
+  const ser = comp.series || ev.series || null;
+  const legO = comp.leg || ev.leg || null;
   return {
     id: String(ev.id),
     league: (ev.league && ev.league.slug) || slug,
@@ -126,8 +129,12 @@ function normEvent(ev, slug) {
     away: teamObj(ac),
     venue: venue.fullName || null,
     city: venue.address ? venue.address.city || null : null,
+    country: venue.address ? venue.address.country || null : null,
     neutral: !!comp.neutralSite,
     odds: comp.odds || null,
+    leg: legO && legO.value != null ? Number(legO.value) : null,
+    series: ser ? { title: ser.title || null, completed: !!ser.completed, total: ser.totalCompetitions != null ? Number(ser.totalCompetitions) : null, agg: Object.fromEntries((ser.competitors || []).map((c) => [String(c.id), num(c.aggregateScore)])) } : null,
+    round: (ev.season && ev.season.slug) || null,
   };
 }
 
@@ -362,6 +369,7 @@ function parseSummary(s, slug, eventId) {
     status,
     venue: venue.fullName || null,
     city: venue.address ? venue.address.city || null : null,
+    country: venue.address ? venue.address.country || null : null,
     neutral: !!hdr.neutralSite,
     home, away, keyEvents, teamStats, rosters, lastFive, h2h, market, injuries,
   };

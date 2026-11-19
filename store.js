@@ -9,6 +9,9 @@ const AB = require('./absence');
 const XG = require('./xg');
 const HV = require('./halves');
 const RS = require('./rest');
+const TIE = require('./tie');
+const ST = require('./stakes');
+const WX = require('./weather');
 
 const DAY = U.DAY;
 const HOUR = 3600000;
@@ -102,7 +105,7 @@ function xgInfo(slug) {
   return x;
 }
 function setXg(slug, v) { xgMem.set(slug, v); U.diskSet('xg', slug, v); trainCache.delete(slug); }
-const paramsOf = (tp) => (tp ? { halfLife: tp.halfLife, prior: tp.prior, xgW: tp.xgW || 0 } : { ...M.DEFAULT_PARAMS, xgW: 0 });
+const paramsOf = (tp) => (tp ? { halfLife: tp.halfLife, prior: tp.prior, xgW: tp.xgW || 0, thK: tp.thK || 0 } : { ...M.DEFAULT_PARAMS, xgW: 0, thK: 0 });
 async function training(slug) {
   const hit = trainCache.get(slug);
   if (hit && Date.now() - hit.at < 20 * 60000) return hit.v;
@@ -118,6 +121,8 @@ async function training(slug) {
     const matches = [];
     let own = 0;
     let used = 0;
+    const skipped = []; // uzatmalı biten maçlar: güç hesabına girmez ama dinlenme takvimi için tutulur
+    const etc = { aet: 0, pen: 0 }; // uzatmada biten ve penaltıya giden maç sayıları (tur atlama hesabı için)
     for (const ps of pool) {
       let got = 0;
       let failed = false;
@@ -127,8 +132,9 @@ async function training(slug) {
             const evs = await E.scoreboardMonth(ps, mo, { ttl: mo === cur || mo === prev ? 20 * 60000 : 24 * HOUR, bg: ps !== slug });
             for (const e of evs) {
               if (!e.status.completed || e.home.score == null || e.away.score == null) continue;
+              if (/AET|PEN|EXTRA/i.test(e.status.name || '')) { if (/PEN/i.test(e.status.name)) etc.pen++; else etc.aet++; skipped.push({ id: e.id, t: Date.parse(e.date), h: e.home.id, a: e.away.id }); continue; } // uzatma/penaltıyla biten maçın skoru 90 dakikalık değil
               got++;
-              matches.push({ id: e.id, t: Date.parse(e.date), h: e.home.id, a: e.away.id, hg: e.home.score, ag: e.away.score, c: ps, neutral: e.neutral || L.NEUTRAL.has(ps), hn: e.home.name, an: e.away.name });
+              matches.push({ id: e.id, t: Date.parse(e.date), h: e.home.id, a: e.away.id, hg: e.home.score, ag: e.away.score, c: ps, neutral: e.neutral || L.NEUTRAL.has(ps), hn: e.home.name, an: e.away.name, vc: ps === slug ? e.city || null : null });
               if (ps === slug) own++;
             }
           } catch (err) {
@@ -146,7 +152,7 @@ async function training(slug) {
     const xi = xgInfo(slug);
     let xgN = 0;
     if (xi && xi.map) for (const m of uniq) { const x = m.c === slug ? xi.map[m.id] : null; if (x) { m.xh = x[0]; m.xa = x[1]; xgN++; } }
-    const v = { matches: uniq, own, pooled: !!L.poolOf(slug), poolSize: used, xgVer: xi ? xi.at : 0, xgN };
+    const v = { matches: uniq, own, pooled: !!L.poolOf(slug), poolSize: used, xgVer: xi ? xi.at : 0, xgN, et: etc, skipped };
     trainCache.set(slug, { at: Date.now(), v });
     return v;
   });
@@ -189,11 +195,11 @@ async function modelFor(slug, cutoff) {
   const tr = await training(slug);
   const tp = tuneInfo(slug);
   const params = paramsOf(tp);
-  const k = `${slug}:${Math.floor(cutoff / (6 * HOUR))}:${params.halfLife}:${params.prior}:${params.xgW}`;
+  const k = `${slug}:${Math.floor(cutoff / (6 * HOUR))}:${params.halfLife}:${params.prior}:${params.xgW}:${params.thK}`;
   let f = fitCache.get(k);
   if (!f || f.tr !== tr) {
     if (fitCache.size > 200) fitCache.clear();
-    f = { tr, mdl: M.fit(tr.matches, cutoff, { halfLife: params.halfLife, prior: params.prior, xgW: params.xgW }) };
+    f = { tr, mdl: M.fit(tr.matches, cutoff, { halfLife: params.halfLife, prior: params.prior, xgW: params.xgW, thK: params.thK }) };
     fitCache.set(k, f);
   }
   return { mdl: f.mdl, tr, params, tp };
@@ -241,8 +247,99 @@ async function predictFromRec(slug, rec, adj) {
       prior: params.prior,
       tuned: !!(tp && tp.tuned),
       xgW: params.xgW || 0,
+      thK: params.thK || 0,
       halfShare: { value: share, measured: !!half, raw: half ? half.raw : null, goals: half ? half.goals : 0 },
     },
+  };
+}
+
+
+// ---------- kupa / eleme: tur atlama ----------
+const ymOf = (ms) => U.ym(new Date(ms));
+async function boardAround(slug, t0, spanDays) {
+  const months = new Set();
+  for (let d = -spanDays; d <= spanDays; d += 10) months.add(ymOf(t0 + d * DAY));
+  const cur = U.ym(new Date()), prev = U.ym(new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 1)));
+  const out = new Map();
+  await Promise.all([...months].map(async (mo) => {
+    try { for (const e of await E.scoreboardMonth(slug, mo, { ttl: mo === cur || mo === prev ? 10 * 60000 : 24 * HOUR })) out.set(e.id, e); } catch (e) { /* eksik ay: eldekiyle devam */ }
+  }));
+  return [...out.values()];
+}
+async function tieInfo(slug, id) {
+  const rec = await matchRecord(slug, id);
+  if (!rec) throw Object.assign(new Error('Maç bulunamadı'), { status: 404 });
+  const t0 = Date.parse(rec.date);
+  // önce sadece bu ayın (ve komşu ayın) tahtasına bak: tur bilgisi yoksa hemen çık
+  let board = await boardAround(slug, t0, 0);
+  let ev = board.find((e) => e.id === String(id));
+  if (!ev) { board = await boardAround(slug, t0, 20); ev = board.find((e) => e.id === String(id)); }
+  if (!ev) return { kind: 'none', reason: 'event' };
+  const twoLeg = ev.leg != null || (ev.series && ev.series.total === 2);
+  const single = !twoLeg && ((ev.series && ev.series.total === 1) || TIE.isKnockoutRound(ev.round));
+  if (!twoLeg && !single) return { kind: 'none' };
+  const X = ev.home.id, Y = ev.away.id;
+  let partner = null;
+  if (twoLeg) {
+    board = await boardAround(slug, t0, 80);
+    const cand = board.filter((e) => e.id !== ev.id && ((e.home.id === X && e.away.id === Y) || (e.home.id === Y && e.away.id === X)) && Math.abs(Date.parse(e.date) - t0) <= 80 * DAY && (e.leg != null || (e.series && e.series.total === 2)) && (e.leg == null || ev.leg == null || e.leg !== ev.leg) && (!e.round || !ev.round || e.round === ev.round));
+    cand.sort((a, b) => Math.abs(Date.parse(a.date) - t0) - Math.abs(Date.parse(b.date) - t0));
+    partner = cand[0] || null;
+  }
+  const { mdl, tr } = await modelFor(slug, Math.min(Date.now(), t0));
+  const neutralOf = (e) => L.NEUTRAL.has(slug) || !!(e && e.neutral);
+  const side = (e) => (e.home.id === X ? 'x' : 'y');
+  const evLegs = [];
+  if (twoLeg) {
+    let first, second;
+    if (partner) [first, second] = Date.parse(partner.date) < t0 ? [partner, ev] : [ev, partner];
+    else if (ev.leg === 2) { first = null; second = ev; } else { first = ev; second = null; }
+    // takvimde olmayan maçı ters saha varsay (ev sahibi X'in rakibi olur)
+    // 2. maçtayız ve 1. maç takvimde yoksa: ESPN'in toplam skorundan (aggregateScore) 1. maç sonucunu çıkar
+    let lost = { missing: true, host: 'y' };
+    if (!first && ev.leg === 2 && ev.series && Number.isFinite(ev.series.agg[X]) && Number.isFinite(ev.series.agg[Y])) {
+      const own = ev.status.state === 'pre' ? [0, 0] : [ev.home.score || 0, ev.away.score || 0];
+      const gx = ev.series.agg[X] - own[0], gy = ev.series.agg[Y] - own[1];
+      if (gx >= 0 && gy >= 0) lost = { missing: true, host: 'y', known: { gx, gy } };
+    }
+    evLegs.push(first || lost, second || { missing: true, host: 'y' });
+  } else evLegs.push(ev);
+  const known = mdl.ok && mdl.games(X) >= 1 && mdl.games(Y) >= 1;
+  const legs = [];
+  const view = [];
+  for (const e of evLegs) {
+    const missing = !!e.missing;
+    const host = missing ? e.host : side(e);
+    const state = missing ? (e.known ? 'post' : 'pre') : e.status.state;
+    const g = { host, state };
+    if (missing && e.known) { g.gx = e.known.gx; g.gy = e.known.gy; }
+    if (!missing && state !== 'pre') {
+      const hs = e.home.score || 0, as = e.away.score || 0;
+      g.gx = host === 'x' ? hs : as; g.gy = host === 'x' ? as : hs;
+    }
+    if (state !== 'post') {
+      if (!known) return { kind: twoLeg ? 'two-leg' : 'single', error: 'Takımlardan biri için geçmiş maç verisi yok' };
+      const hostId = host === 'x' ? X : Y, guestId = host === 'x' ? Y : X;
+      const r = M.matchup(mdl, hostId, guestId, { neutral: neutralOf(missing ? ev : e), comp: slug });
+      g.lx = host === 'x' ? r.lambdaHome : r.lambdaAway;
+      g.ly = host === 'x' ? r.lambdaAway : r.lambdaHome;
+      if (state === 'pre') g.grid = r.grid;
+      if (state === 'in') g.remain = 1 - M.shareDone(parseMinute(e.status));
+    }
+    legs.push(g);
+    view.push({ id: missing ? null : e.id, host, state, date: missing ? null : e.date, score: g.gx != null ? { x: g.gx, y: g.gy } : null, assumed: missing && !e.known, fromAgg: missing && !!e.known });
+  }
+  const cal = TIE.calibrateEt(tr.et, mdl.ok ? mdl.avgGoals : 2.6);
+  const res = TIE.compute(legs, cal.f);
+  return {
+    kind: twoLeg ? 'two-leg' : 'single',
+    round: ev.round || null,
+    title: (ev.series && ev.series.title) || null,
+    legNo: ev.leg || null,
+    teams: { x: { id: X, name: ev.home.name, short: ev.home.short, logo: ev.home.logo }, y: { id: Y, name: ev.away.name, short: ev.away.short, logo: ev.away.logo } },
+    legs: view,
+    ...res,
+    assumptions: { penalty: 0.5, awayGoals: false, et: cal, partnerFound: twoLeg ? !!partner : null, adjusted: false },
   };
 }
 
@@ -1169,7 +1266,7 @@ async function restTimes(slug, months, tr0) {
     const add = (id, t) => { let a = tm.get(id); if (!a) { a = []; tm.set(id, a); } a.push(t); };
     const seen = new Set();
     const trn = tr0 || (await training(slug));
-    for (const m of trn.matches) { if (seen.has(m.id)) continue; seen.add(m.id); add(m.h, m.t); add(m.a, m.t); }
+    for (const m of trn.matches.concat(trn.skipped || [])) { if (seen.has(m.id)) continue; seen.add(m.id); add(m.h, m.t); add(m.a, m.t); }
     const now = new Date();
     const cur = U.ym(now);
     const mos = [];
@@ -1217,6 +1314,113 @@ function restParams(slug) {
   if (est && est.enough && est.significant && est.applied) return { k: est.applied, source: 'league', est, pool, ready: true };
   if (pool.enough && pool.significant && pool.applied) return { k: pool.applied, source: 'pool', est, pool, ready: !!an };
   return { k: null, source: null, est, pool, ready: !!an };
+}
+
+
+// ---- motivasyon: puan durumunda yeri belli takımlar ----
+const stakesMem = new Map();
+async function stakesCtx(slug, tr) {
+  const hit = stakesMem.get(slug);
+  if (hit && hit.tr === tr && Date.now() - hit.at < 30 * 60000) return hit.v;
+  const own = tr.matches.filter((m) => m.c === slug);
+  let rows = null;
+  try { const sd = await standings(slug); if (sd && sd.groups && sd.groups.length === 1) rows = sd.groups[0].rows; } catch (e) { /* not bilgisi yoksa varsayılan çizgiler */ }
+  const ids = new Set(own.flatMap((m) => [m.h, m.a]));
+  const cuts = ST.cutsFromRows(rows, ids.size);
+  const now = new Date();
+  const windowStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 15, 1);
+  const v = { ...ST.analyzeLeague(own, cuts, windowStart), cuts };
+  stakesMem.set(slug, { at: Date.now(), tr, v });
+  return v;
+}
+let stakesPoolMem = null;
+function stakesPoolData() {
+  if (!stakesPoolMem) { const c = U.diskGet('st', 'pool', Infinity); stakesPoolMem = c.hit && c.d && c.d.leagues ? c.d : { leagues: {} }; }
+  return stakesPoolMem;
+}
+function stakesRemember(slug, est) {
+  const p = stakesPoolData();
+  p.leagues[slug] = { beta: est.beta, info: est.info, n: est.n, at: Date.now() };
+  U.diskSet('st', 'pool', p);
+}
+function stakesPoolSummary() {
+  const list = Object.values(stakesPoolData().leagues).filter((x) => Date.now() - x.at < 90 * 24 * HOUR);
+  const r = ST.pool(list);
+  if (r.enough) r.applied = r.significant ? { a: r.beta[0] * ST.SHR, d: r.beta[1] * ST.SHR } : null;
+  return r.enough ? { ...r, a: r.beta[0], d: r.beta[1] } : r;
+}
+function stakesParams(slug) {
+  const an = analysisIfReady(slug, false);
+  const est = an && an.stakes;
+  const pool = stakesPoolSummary();
+  if (est && est.enough && est.significant && est.applied) return { k: est.applied, source: 'league', est, pool, ready: true };
+  if (pool.enough && pool.significant && pool.applied) return { k: pool.applied, source: 'pool', est, pool, ready: !!an };
+  return { k: null, source: null, est, pool, ready: !!an };
+}
+
+// ---- hava durumu ----
+let wxPoolMem = null;
+function wxPoolData() {
+  if (!wxPoolMem) { const c = U.diskGet('wp', 'pool', Infinity); wxPoolMem = c.hit && c.d && c.d.leagues ? c.d : { leagues: {} }; }
+  return wxPoolMem;
+}
+function wxRemember(slug, est) {
+  const p = wxPoolData();
+  p.leagues[slug] = { feats: Object.fromEntries(est.feats.map((f) => [f.key, { beta: f.beta, prec: f.prec }])), at: Date.now() };
+  U.diskSet('wp', 'pool', p);
+}
+function wxPoolSummary() { return WX.pool(Object.values(wxPoolData().leagues).filter((x) => Date.now() - x.at < 90 * 24 * HOUR)); }
+// bu lig için uygulanacak hava katsayıları: özellik başına önce ligin kendi ölçümü, anlamlı değilse birleşik ölçüm
+function wxParams(slug) {
+  const an = analysisIfReady(slug, false);
+  const est = an && an.weather;
+  const pool = wxPoolSummary();
+  const k = {}, src = {};
+  for (const f of WX.FEATS) {
+    const lf = est && est.enough && est.feats && est.feats.find((x) => x.key === f.key);
+    if (lf && lf.adopted) { k[f.key] = lf.beta * WX.SHR; src[f.key] = 'league'; }
+    else if (pool[f.key] && pool[f.key].significant && pool[f.key].applied != null) { k[f.key] = pool[f.key].applied; src[f.key] = 'pool'; }
+  }
+  return { k: Object.keys(k).length ? k : null, src, est, pool, ready: !!an };
+}
+// bir ligin maçları için hava işaretleri: ev sahibi takımın sahasının şehri
+async function weatherFeed(slug, own) {
+  if (WX.isDown()) return { ok: false, reason: 'down' };
+  const cnt = new Map();
+  for (const m of own) { if (!m.vc || m.neutral) continue; let c = cnt.get(m.h); if (!c) { c = new Map(); cnt.set(m.h, c); } c.set(m.vc, (c.get(m.vc) || 0) + 1); }
+  const base = new Map();
+  for (const [tid, c] of cnt) base.set(tid, [...c.entries()].sort((a, b) => b[1] - a[1])[0][0]);
+  if (base.size < 6) return { ok: false, reason: 'nocity' };
+  const loc = await WX.locate([...base.values()]);
+  if (!loc.byCity.size) return { ok: false, reason: WX.isDown() ? 'down' : 'geo' };
+  const t0 = own[0].t - DAY, t1 = own[own.length - 1].t + DAY;
+  const hm = new Map();
+  await eachLimit([...loc.byCity.keys()], 3, async (c) => { hm.set(c, await WX.hourlyFor(loc.byCity.get(c), t0, t1)); });
+  const flags = new Map();
+  const sums = { t: 0, p: 0, w: 0, n: 0 };
+  for (const m of own) {
+    const city = base.get(m.h), h = city && hm.get(city);
+    const w = h && WX.weatherAt(h, m.t);
+    if (w) { flags.set(m.id, { fl: WX.flagsOf(w), w }); sums.t += w.t; sums.p += w.p; sums.w += w.w; sums.n++; }
+  }
+  if (!flags.size) return { ok: false, reason: WX.isDown() ? 'down' : 'nodata' };
+  return { ok: true, flags, cc: loc.cc, cities: loc.byCity.size, asked: loc.asked, avg: { t: sums.t / sums.n, p: sums.p / sums.n, w: sums.w / sums.n } };
+}
+// yaklaşan maç: maç saatindeki tahmin
+async function weatherForMatch(slug, rec) {
+  const t = Date.parse(rec.date);
+  if (t - Date.now() > 15 * 24 * HOUR || WX.isDown()) return null;
+  const city = rec.city;
+  if (!city) return null;
+  const an = analysisIfReady(slug, false);
+  const cc = an && an.weather && an.weather.cc;
+  const res = (await WX.geocode(city)).slice().sort((a, b) => b.pop - a.pop);
+  const pick = (cc && res.find((r) => r.cc === cc)) || (cc ? null : res[0]);
+  if (!pick) return null;
+  const hm = await WX.hourlyFor(pick, t - DAY, t + DAY);
+  const w = WX.weatherAt(hm, t);
+  if (!w) return null;
+  return { city, w, fl: WX.flagsOf(w) };
 }
 
 async function runAnalysis(slug, job) {
@@ -1276,7 +1480,7 @@ async function runAnalysis(slug, job) {
     own.forEach((m, i) => { if (m.t >= s0 && m.t < s0 + WK) idxs.push(i); });
     if (!idxs.length) continue;
     await tickS();
-    const mdl = M.fit(tr.matches, s0, { halfLife: params.halfLife, prior: params.prior, iters: 40, xgW: params.xgW });
+    const mdl = M.fit(tr.matches, s0, { halfLife: params.halfLife, prior: params.prior, iters: 40, xgW: params.xgW, thK: params.thK });
     if (!mdl.ok) continue;
     for (const i of idxs) {
       const m = own[i];
@@ -1318,14 +1522,41 @@ async function runAnalysis(slug, job) {
     if (rest.enough) restRemember(slug, rest);
   } catch (e) { U.log('dinlenme analizi hatası', slug, e.message); }
 
-  return { league: slug, at: Date.now(), matches: own.length, sp, absence, params, xg, half, markets, rest };
+  // --- motivasyon: işi bitmiş takımlar ---
+  let stakes = { enough: false, n: 0 };
+  try {
+    const ctx = await stakesCtx(slug, tr);
+    if (!ctx.seasonsUsed) stakes = { enough: false, n: 0, reason: ctx.reason };
+    else {
+      const feed = own.map((m) => { const l = lam.get(m.id), f = ctx.flags.get(m.id); return { hg: m.hg, ag: m.ag, lh: l ? l[0] : null, la: l ? l[1] : null, sh: f ? f.h : null, sa: f ? f.a : null }; });
+      stakes = { ...ST.estimate(ST.buildRows(feed)), seasons: ctx.seasonsUsed, cuts: ctx.cuts };
+      if (stakes.enough) stakesRemember(slug, stakes);
+    }
+  } catch (e) { U.log('motivasyon analizi hatası', slug, e.message); }
+
+  // --- hava durumu etkisi (Open-Meteo) ---
+  let weather = { enough: false, n: 0 };
+  try {
+    if (L.isCupOrIntl(slug) || L.NEUTRAL.has(slug)) weather = { enough: false, n: 0, reason: 'intl' };
+    else {
+      const wf = await weatherFeed(slug, own);
+      if (!wf.ok) weather = { enough: false, n: 0, reason: wf.reason };
+      else {
+        const feed = own.map((m) => { const l = lam.get(m.id), f = wf.flags.get(m.id); return { hg: m.hg, ag: m.ag, lh: l ? l[0] : null, la: l ? l[1] : null, fl: f ? f.fl : null }; });
+        weather = { ...WX.estimate(WX.buildRows(feed)), cities: wf.cities, matched: wf.flags.size, cc: wf.cc, avg: wf.avg };
+        if (weather.enough) wxRemember(slug, weather);
+      }
+    }
+  } catch (e) { U.log('hava analizi hatası', slug, e.message); }
+
+  return { league: slug, at: Date.now(), matches: own.length, sp, absence, params, xg, half, markets, rest, stakes, weather };
 }
 
 function leagueAnalysis(slug) {
   const hit = anMem.get(slug);
-  if (hit && Date.now() - hit.at < 12 * HOUR) return { status: 'ready', ...hit.v, restPool: restPoolSummary() };
+  if (hit && Date.now() - hit.at < 12 * HOUR) return { status: 'ready', ...hit.v, restPool: restPoolSummary(), stakesPool: stakesPoolSummary(), weatherPool: wxPoolSummary() };
   const c = U.diskGet('an', slug, 12 * HOUR);
-  if (c.hit && c.d) { anMem.set(slug, { at: c.t, v: c.d }); return { status: 'ready', ...c.d, restPool: restPoolSummary() }; }
+  if (c.hit && c.d) { anMem.set(slug, { at: c.t, v: c.d }); return { status: 'ready', ...c.d, restPool: restPoolSummary(), stakesPool: stakesPoolSummary(), weatherPool: wxPoolSummary() }; }
   let j = anJobs.get(slug);
   if (j && j.status === 'error' && Date.now() - j.at < 5 * 60000) return { status: 'error', error: j.error };
   if (!j || j.status === 'error') {
@@ -1386,6 +1617,43 @@ async function predictAdj(slug, id) {
       factors: rp.k ? RS.factors(rp.k, rh, ra) : { home: 1, away: 1 },
     };
   } catch (e) { U.log('dinlenme bilgisi hatası', slug, e.message); }
+  // motivasyon: puan durumunda yeri belli takımlar
+  let stk = null;
+  try {
+    const tr = await training(slug);
+    const ctx = await stakesCtx(slug, tr);
+    const cur = ctx.current;
+    const sh = cur && cur.now.get(rec.home.id), sa = cur && cur.now.get(rec.away.id);
+    if (sh && sa) {
+      const sp = stakesParams(slug);
+      const anyS = sh.settled || sa.settled;
+      let reason;
+      if (sp.k && sp.source === 'league') reason = `Bu ligin ${Math.round(sp.est.n)} maçında ölçüldü ve anlamlı bulundu.`;
+      else if (sp.k && sp.source === 'pool') reason = `Bu ligde tek başına anlamlı çıkmadı, ama analiz edilen ${sp.pool.leagues} ligin birleşik ölçümünde anlamlı bulundu.`;
+      else if (!sp.ready) reason = 'Bu lig için motivasyon etkisi henüz ölçülmedi (arka planda hesaplanıyor), tahmine katılmadı.';
+      else if (sp.est && !sp.est.enough) reason = 'Bu ligin geçmişinde "işi bitmiş" takım-maç sayısı ölçüm için yetersiz, tahmine katılmadı.';
+      else reason = 'Bu ligin geçmiş maçlarında "işi bitmiş" takımların gol beklentisi anlamlı değişmedi, tahmine katılmadı.';
+      stk = {
+        home: { settled: sh.settled, remaining: sh.remaining, points: sh.points }, away: { settled: sa.settled, remaining: sa.remaining, points: sa.points },
+        anyStakes: anyS, applied: !!sp.k && anyS, source: sp.source, params: sp.k, reason,
+        factors: sp.k ? ST.factors(sp.k, sh.settled, sa.settled) : { home: 1, away: 1 },
+      };
+    }
+  } catch (e) { U.log('motivasyon bilgisi hatası', slug, e.message); }
+  // hava durumu (maç saatindeki tahmin)
+  let wx = null;
+  try {
+    const wm = await weatherForMatch(slug, rec);
+    if (wm) {
+      const wp = wxParams(slug);
+      const names = WX.FEATS.filter((f, j) => wm.fl[j]);
+      const used = names.filter((f) => wp.k && wp.k[f.key] != null);
+      wx = {
+        city: wm.city, t: wm.w.t, rain: wm.w.p, wind: wm.w.w, flags: names.map((f) => ({ key: f.key, label: f.label, applied: !!(wp.k && wp.k[f.key] != null), source: wp.src[f.key] || null, beta: wp.k && wp.k[f.key] != null ? wp.k[f.key] : null })),
+        anyFlag: names.length > 0, applied: used.length > 0, ready: wp.ready, factor: wp.k ? WX.factor(wp.k, wm.fl) : 1,
+      };
+    }
+  } catch (e) { U.log('hava bilgisi hatası', slug, e.message); }
   // eksik oyuncular
   let abs = null;
   try {
@@ -1409,11 +1677,11 @@ async function predictAdj(slug, id) {
       }
     }
   } catch (e) { U.log('eksik oyuncu bilgisi hatası', slug, e.message); }
-  const anyAbs = !!abs, anyRest = !!(rest && rest.anyShort);
-  if (!anyAbs && !anyRest) return { applicable: true, any: false, anyRest: false, rest };
-  const fa = abs ? abs.f : { home: 1, away: 1 }, fr = rest && rest.applied ? rest.factors : { home: 1, away: 1 };
-  const f = { home: fa.home * fr.home, away: fa.away * fr.away };
-  const adjusts = anyAbs || (rest && rest.applied);
+  const anyAbs = !!abs, anyRest = !!(rest && rest.anyShort), anyStakes = !!(stk && stk.anyStakes), anyWx = !!(wx && wx.anyFlag);
+  if (!anyAbs && !anyRest && !anyStakes && !anyWx) return { applicable: true, any: false, anyRest: false, anyStakes: false, anyWx: false, rest, stakes: stk, weather: wx };
+  const fa = abs ? abs.f : { home: 1, away: 1 }, fr = rest && rest.applied ? rest.factors : { home: 1, away: 1 }, fs = stk && stk.applied ? stk.factors : { home: 1, away: 1 }, fw = wx && wx.applied ? wx.factor : 1;
+  const f = { home: fa.home * fr.home * fs.home * fw, away: fa.away * fr.away * fs.away * fw };
+  const adjusts = anyAbs || (rest && rest.applied) || (stk && stk.applied) || (wx && wx.applied);
   let base = null, adjusted = null;
   if (adjusts) {
     const pick = (p) => ({ home: p.markets.home, draw: p.markets.draw, away: p.markets.away, over25: p.markets.over['2.5'], over15: p.markets.over['1.5'], btts: p.markets.btts, top: p.markets.topScores[0] ? p.markets.topScores[0].s : null, lh: p.lambdaHome, la: p.lambdaAway });
@@ -1421,15 +1689,15 @@ async function predictAdj(slug, id) {
     adjusted = pick(await predictFromRec(slug, rec, f));
   }
   return {
-    applicable: true, any: anyAbs, anyRest, adjusts,
+    applicable: true, any: anyAbs, anyRest, anyStakes, anyWx, adjusts,
     home: abs ? abs.mh : { absent: [], att: 0, def: 0 }, away: abs ? abs.ma : { absent: [], att: 0, def: 0 },
     factors: f,
     params: abs ? { att: abs.k.att, def: abs.k.def, source: abs.source, reason: abs.reason } : null,
-    rest, base, adjusted,
+    rest, stakes: stk, weather: wx, base, adjusted,
   };
 }
 
 module.exports = {
   matchesFor, matchDetail, matchRecord, predict, liveData, matchupTeams, propsFor, todayTable, backtestLeague, backtestSummary, standings, teamData, playerData, matchPlayers,
-  leadersState, search, startIndex, searchIdx, training, posGroup, leagueTable, leagueDetail, leagueAnalysis, predictAdj, spToday,
+  leadersState, search, startIndex, searchIdx, training, posGroup, leagueTable, leagueDetail, leagueAnalysis, predictAdj, spToday, tieInfo,
 };

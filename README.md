@@ -24,19 +24,23 @@ Futbol istatistik ve tahmin uygulaması. Tüm dosyalar tek klasörde, telefondan
 - Günün korner ve kart tablosu (Günün tablosunun üstündeki "Korner ve kart" sekmesi): bugünkü tüm maçlar için beklenen korner/kart ve çizgi olasılıkları, lige ve olasılığa göre süzgeç, sıralama. İlk açılışta takımların son maçları okunur, satırlar geldikçe görünür
 - İlk yarı payı: gollerin kaçının ilk yarıda atıldığı ligden ölçülür (varsayılan %46 yerine). Karne'de "İlk yarı payı ve pazar karnesi": ilk yarı, İY/MS, maç farkı, gol aralığı, handikap, ilk gol, tek/çift pazarları geçmiş maçlarda kalibrasyon ve "Doğrulandı / farkı anlamlı değil" kararıyla
 - Dinlenme ve maç yoğunluğu: son maçından 3,6 günden az dinlenen takımın gol beklentisi değişiyor mu ölçülür (lig, yerel kupa ve Avrupa/kıta kupası maçları dahil). Anlamlıysa (kendi ligi ya da birleşik ölçüm) ayarlı tahmine katılır, değilse sadece bilgi olarak gösterilir
+- Takıma özel ev avantajı: her takımın kendi sahasındaki farkı (ligin ortalamasına doğru çekilerek) ölçülür. Seçimde iyileşme ve dışarıda (son 120 gün) kötüleşmeme şartı aranır; sağlanmazsa herkese aynı ev avantajı kullanılır. Model ayarı panelinde sonucu görürsün
+- Kupa ve eleme: iki maçlı turlarda ve tek maçlık eleme maçlarında "tur atlama olasılığı" (Tahmin sekmesi): toplam skor + uzatma + penaltı. Penaltı 50-50, deplasman golü kuralı yok sayılır, uzatmada gol hızı yeterli uzatmalı maç varsa ölçülür, yoksa varsayım (doğrulanmadı etiketiyle)
+- Motivasyon: sezon sonunda puan durumunda yeri matematiksel olarak belli olan ("işi bitmiş": şampiyonluk, Avrupa sınırları ve küme düşme çizgisinin hiçbirinde yeri değişemez) takımın gol beklentisi değişiyor mu ölçülür (lig + birleşik ölçüm). Anlamlıysa ayarlı tahmine katılır, değilse sadece bilgi
+- Hava durumu: Open-Meteo'dan (ücretsiz, anahtarsız) maç saatindeki sıcaklık, yağmur ve rüzgâr alınır; her durumun gol beklentisine etkisi ölçülür (z ≥ 2,5 + genel test). Sadece anlamlı olanlar ayarlı tahmine katılır. Hava verisine ulaşılamazsa uygulama normal çalışır, Karne'de neden yapılamadığı yazar
 - 90'dan fazla turnuva: İngiltere 3-4-5. lig, İskoçya 2. lig, Rusya, Meksika 2, ABD USL, Arjantin 2-3, Brezilya 2, Uruguay, Peru, Paraguay, Ekvador, Venezuela, Bolivya, Honduras, Kosta Rika, Guatemala, El Salvador, Hindistan 1-2, Güney Afrika ve ulusal kupalar (FA Cup, Copa del Rey, Coppa Italia, Fransa ve Almanya kupaları vb.)
 
 ## İnternete açmak (telefon veya bilgisayar)
 1. GitHub'da yeni bir depo aç, bu klasördeki TÜM dosyaları depoya yükle (klasör yok, hepsi yan yana).
 2. render.com → GitHub ile giriş → New + → Blueprint (veya Web Service → Language: Docker → Free) → depoyu seç.
 3. Yeşil "Live" yazısı çıkınca verilen adresi aç. Telefonda "Ana ekrana ekle" ile uygulama gibi kur.
-Güncelleme için: GitHub'da dosyaların üzerine yeni dosyaları yükle (aynı isimdekiler değişir). Eski `index-....js` ve `extras-....css` dosyalarını depodan sil (silmesen de çalışır, sadece yer kaplar). Yeni gelen dosyaları da yüklemeyi unutma: `xg.js`, `halves.js`, `rest.js` (yeni), ayrıca `store.js`, `model.js`, `spmodel.js`, `index.js`, `index.html`, `sw.js` ve yeni `index-....js` / `extras-....css`.
+Güncelleme için: GitHub'da dosyaların üzerine yeni dosyaları yükle (aynı isimdekiler değişir). Eski `index-....js` ve `extras-....css` dosyalarını depodan sil (silmesen de çalışır, sadece yer kaplar). Yeni gelen dosyaları da yüklemeyi unutma: `glm.js`, `tie.js`, `stakes.js`, `weather.js` (yeni), ayrıca `espn.js`, `store.js`, `model.js`, `index.js`, `index.html`, `sw.js` ve yeni `index-....js` / `extras-....css`.
 
 ## Bilgisayarda çalıştırmak
 Node.js 18+ kur, bu klasörde `npm start` yaz, http://localhost:8080 adresini aç.
 
 ## Ayarlar (isteğe bağlı ortam değişkenleri)
-PORT (8080), DATA_DIR (./data), FG_CONCURRENCY (8), BG_CONCURRENCY (6), WARM (0 yaparsan arama dizinini açılışta kurmaz).
+PORT (8080), DATA_DIR (./data), FG_CONCURRENCY (8), BG_CONCURRENCY (6), WARM (0 yaparsan arama dizinini açılışta kurmaz). Hava için WX_GEO, WX_ARCHIVE, WX_FORECAST (Open-Meteo adresleri; normalde dokunma).
 
 ## Notlar
 - Veri: ESPN'in herkese açık futbol verisi. Resmi bir API değildir, bazı alanlar değişirse bazı ekranlar boş kalabilir.

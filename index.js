@@ -68,6 +68,7 @@ route(/^\/api\/match\/([^/]+)\/([^/]+)$/, async ([, lg, mid]) => {
 
 route(/^\/api\/predict\/([^/]+)\/([^/]+)$/, async ([, lg, mid]) => ({ data: await S.predict(openLeague(lg), id(mid)) }));
 
+route(/^\/api\/tie\/([^/]+)\/([^/]+)$/, async ([, lg, mid]) => ({ data: await S.tieInfo(openLeague(lg), id(mid)) }));
 route(/^\/api\/live\/([^/]+)\/([^/]+)$/, async ([, lg, mid]) => ({ data: await S.liveData(openLeague(lg), id(mid)) }));
 
 route(/^\/api\/props\/([^/]+)\/([^/]+)$/, async ([, lg, mid]) => ({ data: await S.propsFor(openLeague(lg), id(mid)) }));
