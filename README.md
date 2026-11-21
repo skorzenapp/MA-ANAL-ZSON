@@ -28,13 +28,19 @@ Futbol istatistik ve tahmin uygulaması. Tüm dosyalar tek klasörde, telefondan
 - Kupa ve eleme: iki maçlı turlarda ve tek maçlık eleme maçlarında "tur atlama olasılığı" (Tahmin sekmesi): toplam skor + uzatma + penaltı. Penaltı 50-50, deplasman golü kuralı yok sayılır, uzatmada gol hızı yeterli uzatmalı maç varsa ölçülür, yoksa varsayım (doğrulanmadı etiketiyle)
 - Motivasyon: sezon sonunda puan durumunda yeri matematiksel olarak belli olan ("işi bitmiş": şampiyonluk, Avrupa sınırları ve küme düşme çizgisinin hiçbirinde yeri değişemez) takımın gol beklentisi değişiyor mu ölçülür (lig + birleşik ölçüm). Anlamlıysa ayarlı tahmine katılır, değilse sadece bilgi
 - Hava durumu: Open-Meteo'dan (ücretsiz, anahtarsız) maç saatindeki sıcaklık, yağmur ve rüzgâr alınır; her durumun gol beklentisine etkisi ölçülür (z ≥ 2,5 + genel test). Sadece anlamlı olanlar ayarlı tahmine katılır. Hava verisine ulaşılamazsa uygulama normal çalışır, Karne'de neden yapılamadığı yazar
+- Model ve piyasa (v1.6): maç sayfasında modelin ve bahis oranlarının olasılığı yan yana. Karışım (model + piyasa) yürüyen testte modelden anlamlı iyi çıkarsa "Karışık" sütunu da gösterilir (ağırlık ilk %60'ta seçilir, son %40'ta sınanır, z ≥ 1,64)
+- Sanal kâr/zarar testi (v1.6, Karne): model piyasadan 3, 5, 8, 12 puan farklı düşündüğü maçlara oynansaydı geçmişte kâr eder miydi? Bahis şirketi marjı hesaba katılır; "kanıtlı kâr" için en az 40 bahis ve z ≥ 2,2 aranır. Çoğu ligde "kanıt yok" ya da "kanıtlı zarar" çıkması beklenir, bu normal
+- Kırmızı kartın canlı etkisi (v1.6): 10 kişi kalan takımın ve rakibinin kalan dakikalardaki gol beklentisi ölçülür (kırmızı kart dakikalarına göre parçalanmış Poisson regresyon, lig + ligler arası birleşik ölçüm, z ≥ 2,2). Anlamlıysa canlı olasılıklara uygulanır ve "kırmızısız olsaydı" değeri gösterilir; değilse kutu sadece uyarır
+- Hakem etkisi (v1.6): hakemin maçlarındaki sarı kart sayısı kart modelinin beklentisinden sapıyor mu, yürüyen testle ölçülür. ESPN çoğu ligde hakem adını VERMEDİĞİ için şu an çoğu ligde "ölçülemedi" yazar; veri gelirse kendiliğinden çalışır
+- İlk 11 ile otomatik ayar (v1.6): kadro açıklanınca kilit oyuncu eksiği sakatlık listesine göre değil gerçek ilk 11'e göre hesaplanır (18'de yoksa tam, yedekteyse yarım eksik); sakat listesindeki oyuncu ilk 11'de başlıyorsa uyarı kalkar. Maça 4 saatten az kala sayfa 2 dakikada bir kendini yeniler
+- Ölçüm özeti (v1.6, adres: /olcum ya da ana sayfadaki "Ölçüm özeti" bağlantısı): her etki için kaç ligde doğrulandı, kaç ligde anlamlı çıkmadı, kaç ligde ölçülemedi; ligler arası birleşik ölçümler ve lig × etki tablosu. Hesaplanmamış ligleri 3'er 3'er hesaplatan düğme var
 - 90'dan fazla turnuva: İngiltere 3-4-5. lig, İskoçya 2. lig, Rusya, Meksika 2, ABD USL, Arjantin 2-3, Brezilya 2, Uruguay, Peru, Paraguay, Ekvador, Venezuela, Bolivya, Honduras, Kosta Rika, Guatemala, El Salvador, Hindistan 1-2, Güney Afrika ve ulusal kupalar (FA Cup, Copa del Rey, Coppa Italia, Fransa ve Almanya kupaları vb.)
 
 ## İnternete açmak (telefon veya bilgisayar)
 1. GitHub'da yeni bir depo aç, bu klasördeki TÜM dosyaları depoya yükle (klasör yok, hepsi yan yana).
 2. render.com → GitHub ile giriş → New + → Blueprint (veya Web Service → Language: Docker → Free) → depoyu seç.
 3. Yeşil "Live" yazısı çıkınca verilen adresi aç. Telefonda "Ana ekrana ekle" ile uygulama gibi kur.
-Güncelleme için: GitHub'da dosyaların üzerine yeni dosyaları yükle (aynı isimdekiler değişir). Eski `index-....js` ve `extras-....css` dosyalarını depodan sil (silmesen de çalışır, sadece yer kaplar). Yeni gelen dosyaları da yüklemeyi unutma: `glm.js`, `tie.js`, `stakes.js`, `weather.js` (yeni), ayrıca `espn.js`, `store.js`, `model.js`, `index.js`, `index.html`, `sw.js` ve yeni `index-....js` / `extras-....css`.
+Güncelleme için: GitHub'da dosyaların üzerine yeni dosyaları yükle (aynı isimdekiler değişir). Eski `index-....js` ve `extras-....css` dosyalarını depodan sil (silmesen de çalışır, sadece yer kaplar). Yeni gelen dosyaları da yüklemeyi unutma: `betting.js`, `referee.js`, `redcard.js` (yeni; v1.5'ten gelen `glm.js`, `tie.js`, `stakes.js`, `weather.js` de yüklü olmalı), ayrıca `espn.js`, `store.js`, `model.js`, `spmodel.js`, `absence.js`, `index.js`, `index.html`, `sw.js` ve yeni `index-....js` / `extras-....css`.
 
 ## Bilgisayarda çalıştırmak
 Node.js 18+ kur, bu klasörde `npm start` yaz, http://localhost:8080 adresini aç.
@@ -45,7 +51,7 @@ PORT (8080), DATA_DIR (./data), FG_CONCURRENCY (8), BG_CONCURRENCY (6), WARM (0 
 ## Notlar
 - Veri: ESPN'in herkese açık futbol verisi. Resmi bir API değildir, bazı alanlar değişirse bazı ekranlar boş kalabilir.
 - Tahminler garanti değildir. "Karne" sekmesi modelin geçmişte gerçekte ne kadar tutturduğunu gösterir. Piyasa farkı otomatik olarak "değerli bahis" demek değildir.
-- Hakem verisi yok: ESPN hakem bilgisini vermiyor.
+- Hakem verisi: ESPN maç özetlerinde çoğu ligde hakem adı yok (Premier Lig, Süper Lig, Şampiyonlar Ligi, MLS örneklerinde yoktu). Hakem etkisi bu yüzden çoğu ligde ölçülemez.
 - Bazı ligler kapalı: Türkiye 1. Lig, Kore, İsviçre, Polonya, Çekya, Finlandiya (ESPN'de veri yok ya da boş).
 - Alt ligler ve küçük ülke ligleri: ESPN bazılarında sadece skor verir. Korner, kart ve oyuncu ayrıntısı olmayabilir, o zaman ilgili bölüm boş görünür ya da gizlenir.
 - Önbellek sorun çıkarırsa adresin sonuna `?nosw=1` ekleyip aç: çevrimdışı önbellek temizlenir.

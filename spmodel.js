@@ -76,7 +76,7 @@ function backtestSp(recs, { minTest = 20 } = {}) {
     if (ex && nAll >= 20) {
       const meanC = sumC / nAll, meanY = sumY / nAll;
       rows.push({
-        t: r.t, actC: r.sp.c + r.sp.ca, actY: r.sp.y + r.sp.ya,
+        t: r.t, ref: r.ref || null, actC: r.sp.c + r.sp.ca, actY: r.sp.y + r.sp.ya,
         predC: ex.corners.t, predY: ex.cards.t, pmfC: ex.corners.total, pmfY: ex.cards.total,
         baseC: meanC, baseY: meanY, rC: dispersion(totsC), rY: dispersion(totsY),
       });
@@ -127,7 +127,9 @@ function backtestSp(recs, { minTest = 20 } = {}) {
     const avgSkill = lines.length ? lines.reduce((s, l) => s + (l.skill || 0), 0) / lines.length : null;
     return { n, meanActual: mean(act), meanPred: mean(pred), bias: mean(pred) - mean(act), mae: mae(pred), maeBase: mae(base), lines, skill: avgSkill };
   };
-  return { n: rows.length, enough: true, corners: mk('C'), cards: mk('Y'), from: rows[0].t, to: rows[rows.length - 1].t };
+  // hakem analizi için hafif satırlar (çağıran kullanıp atar, diske yazılmaz)
+  const rowsLite = rows.map((r) => ({ t: r.t, ref: r.ref, act: r.actY, pred: r.predY }));
+  return { n: rows.length, enough: true, corners: mk('C'), cards: mk('Y'), from: rows[0].t, to: rows[rows.length - 1].t, rowsLite };
 }
 
 module.exports = { nbPmf, pOver, dispersion, sideStats, expected, backtestSp };

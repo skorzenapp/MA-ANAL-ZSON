@@ -44,6 +44,43 @@ function missFeatures(hist, cur) {
   return { att: Math.min(0.6, missAtt), def: Math.min(1, absDef / 5), n: H.length };
 }
 
+// Maç öncesi, açıklanan kadroya göre: kilit oyuncu(lar) bu maçın 18'inde yok mu?
+// hist: missFeatures ile aynı (en yenisi başta; oyuncu bilgisinde name de olabilir). squad: 18'e girenlerin kimlikleri, starters: ilk 11.
+// Ölçümde "eksik" = o maçta hiç oynamayan kilit oyuncu idi. Burada: 18'de yok -> tam eksik (ağırlık 1); yedekte -> yarım (0,5, oyuna girebilir).
+// Aynı eşikler (son 6 maçta oynamış, maçların %40'ında oynamış, %60'ında ilk 11'de savunmacı) kullanılır ki ölçülen katsayı aynen geçerli olsun.
+function lineupMiss(hist, squad, starters) {
+  const H = hist.slice(0, 30);
+  if (H.length < 8) return null;
+  const agg = new Map();
+  H.forEach((m, idx) => {
+    for (const [id, p] of m.players) {
+      let o = agg.get(id);
+      if (!o) { o = { id, name: p.name || null, pos: p.pos, apps: 0, starts: 0, goals: 0, assists: 0, last: idx }; agg.set(id, o); }
+      o.apps++; if (p.starter) o.starts++;
+      o.goals += p.goals || 0; o.assists += p.assists || 0;
+      if (idx < o.last) o.last = idx;
+      if (!o.name && p.name) o.name = p.name;
+    }
+  });
+  let C = 0;
+  for (const o of agg.values()) C += o.goals + 0.5 * o.assists;
+  let att = 0, def = 0;
+  const absent = [];
+  for (const o of agg.values()) {
+    if (starters.has(o.id) || o.last > 5) continue;
+    const w = squad.has(o.id) ? 0.5 : 1;
+    const share = C > 0 ? (o.goals + 0.5 * o.assists) / C : 0;
+    const regAtt = C > 0 && o.apps >= 0.4 * H.length;
+    const g = posGroup(o.pos);
+    const regDef = (g === 'G' || g === 'D') && o.starts >= 0.6 * H.length;
+    if (regAtt) att += w * share;
+    if (regDef) def += w / 5;
+    if ((regAtt && share >= 0.08) || regDef) absent.push({ name: o.name || '?', pos: o.pos, status: w === 1 ? 'Kadroda yok' : 'Yedekte', detail: '', share, goals: o.goals, assists: o.assists, starts: o.starts, kind: regAtt && share >= 0.08 ? 'att' : 'def', w });
+  }
+  absent.sort((a, b) => b.share - a.share || b.starts - a.starts);
+  return { absent, att: Math.min(0.6, att), def: Math.min(1, def), n: H.length };
+}
+
 // rows: [{y: atılan gol, mu: modelin beklentisi, x: atan takımın hücum eksiği, z: rakibin savunma eksiği}]
 function ll(rows, kA, kD) {
   let s = 0;
@@ -151,4 +188,4 @@ function factors(k, mh, ma) {
   return { home: Math.exp(-k.att * mh.att + k.def * ma.def), away: Math.exp(-k.att * ma.att + k.def * mh.def) };
 }
 
-module.exports = { DEFAULT_K, posGroup, missFeatures, buildRows, estimate, currentMiss, factors, sameName, statusTr };
+module.exports = { DEFAULT_K, posGroup, played, missFeatures, lineupMiss, buildRows, estimate, currentMiss, factors, sameName, statusTr };

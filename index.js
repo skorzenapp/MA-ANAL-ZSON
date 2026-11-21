@@ -115,6 +115,7 @@ route(/^\/api\/league-table$/, async () => ({ data: S.leagueTable() }));
 route(/^\/api\/league\/([^/]+)$/, async ([, lg]) => ({ data: S.leagueDetail(openLeague(lg)) }));
 
 route(/^\/api\/analysis\/([^/]+)$/, async ([, lg]) => ({ data: S.leagueAnalysis(openLeague(lg)) }));
+route(/^\/api\/measure-summary$/, async (_m, q) => ({ data: S.measureSummary(q.get('run')) }));
 route(/^\/api\/predict-adj\/([^/]+)\/([^/]+)$/, async ([, lg, mid]) => ({ data: await S.predictAdj(openLeague(lg), id(mid)) }));
 
 route(/^\/api\/backtest\/([^/]+)$/, async ([, lg]) => ({ data: await S.backtestLeague(openLeague(lg)) }));

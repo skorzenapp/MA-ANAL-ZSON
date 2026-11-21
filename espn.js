@@ -250,6 +250,20 @@ function parseMarket(list) {
   return null;
 }
 
+// Orta hakem adı. ESPN'in açık verisinde birçok ligde bu alan hiç yok (null döner); varsa gameInfo.officials ya da maç başlığından okunur.
+function refereeOf(s) {
+  const hdr = ((s.header && s.header.competitions) || [])[0] || {};
+  const lists = [(s.gameInfo || {}).officials, hdr.officials];
+  for (const l of lists) {
+    if (!Array.isArray(l) || !l.length) continue;
+    const nm = (o) => (o && (o.fullName || o.displayName || o.name)) || null;
+    const pos = (o) => String((o && o.position && (o.position.name || o.position.displayName)) || (o && o.role) || '').toLowerCase();
+    const main = l.find((o) => /referee|hakem/.test(pos(o)) && !/assistant|fourth|4th|video|var\b|yard/.test(pos(o))) || l.find((o) => o && Number(o.order) === 1 && !pos(o));
+    if (main && nm(main)) return String(nm(main)).trim();
+  }
+  return null;
+}
+
 // ---------- maç özeti -> sade kayıt ----------
 function parseSummary(s, slug, eventId) {
   if (!s) return null;
@@ -371,6 +385,7 @@ function parseSummary(s, slug, eventId) {
     city: venue.address ? venue.address.city || null : null,
     country: venue.address ? venue.address.country || null : null,
     neutral: !!hdr.neutralSite,
+    referee: refereeOf(s),
     home, away, keyEvents, teamStats, rosters, lastFive, h2h, market, injuries,
   };
 }
@@ -416,5 +431,5 @@ function parseStandings(j) {
 module.exports = {
   SITE, CORE, WEB, getJSON, stats,
   normEvent, scoreboardDay, scoreboardMonth, summaryRaw, standingsRaw, scheduleRaw, teamsListRaw, teamRosterRaw, rosterStatsRaw, athleteRaw,
-  flattenStats, mapDetail, DETAIL_MAP, RICH, parseSummary, parseStandings, parseMarket, num, logoOf,
+  flattenStats, mapDetail, DETAIL_MAP, RICH, parseSummary, refereeOf, parseStandings, parseMarket, num, logoOf,
 };
