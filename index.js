@@ -50,7 +50,7 @@ const league = (s) => { must(SLUG.test(s) && L.BY[s], 404, 'Bilinmeyen lig'); re
 const openLeague = (s) => { league(s); must(L.BY[s].available, 404, 'Bu lig için veri yok'); return s; };
 const id = (s) => { must(ID.test(s), 400, 'Geçersiz kimlik'); return s; };
 
-route(/^\/api\/health$/, async () => ({ data: { ok: true, uptime: Math.round(process.uptime()), espn: E.stats, search: { players: S.searchIdx.items.length, building: S.searchIdx.building }, leagues: L.AVAILABLE.length } }));
+route(/^\/api\/health$/, async () => ({ data: { ok: true, uptime: Math.round(process.uptime()), espn: E.stats, search: { players: S.searchIdx.items.length, building: S.searchIdx.building }, leagues: L.AVAILABLE.length, fd: require('./fdata').status() } }));
 
 route(/^\/api\/matches\/(\d{8})\/([^/]+)$/, async ([, date, lg], q) => {
   if (lg !== 'all') league(lg);
@@ -115,6 +115,10 @@ route(/^\/api\/league-table$/, async () => ({ data: S.leagueTable() }));
 route(/^\/api\/league\/([^/]+)$/, async ([, lg]) => ({ data: S.leagueDetail(openLeague(lg)) }));
 
 route(/^\/api\/analysis\/([^/]+)$/, async ([, lg]) => ({ data: S.leagueAnalysis(openLeague(lg)) }));
+route(/^\/api\/results$/, async (_m, q) => {
+  const ids = String(q.get('ids') || '').split(',').filter(Boolean).slice(0, 80).map((x) => { const i = x.indexOf(':'); return [openLeague(x.slice(0, i)), id(x.slice(i + 1))]; });
+  return { data: await S.resultsFor(ids) };
+});
 route(/^\/api\/measure-summary$/, async (_m, q) => ({ data: S.measureSummary(q.get('run')) }));
 route(/^\/api\/predict-adj\/([^/]+)\/([^/]+)$/, async ([, lg, mid]) => ({ data: await S.predictAdj(openLeague(lg), id(mid)) }));
 
