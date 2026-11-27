@@ -282,7 +282,9 @@ async function enrich(slug, rec) {
   try { r = await lookup(slug, rec); } catch (e) { return rec; }
   if (!r) return rec;
   const out = { ...rec, fd: { odds: false, ref: false } };
-  if (r.p) {
+  // yaklaşan maçta ESPN'in kendi (güncel) oranı varsa o kalır: fixtures.csv günde birkaç kez güncellenir, oran hareketi için ESPN daha taze. Biten maçta kapanış ortalaması (daha keskin) kullanılır
+  const keepEspn = !!(rec.market && rec.status && rec.status.state === 'pre');
+  if (r.p && !keepEspn) {
     const dec = r.dec || [1 / r.p[0], 1 / r.p[1], 1 / r.p[2]];
     out.market = { provider: 'Piyasa ortalaması (football-data.co.uk)', home: r.p[0], draw: r.p[1], away: r.p[2], decHome: dec[0], decDraw: dec[1], decAway: dec[2], total: r.ou != null ? 2.5 : null, overProb: r.ou != null ? r.ou : null, src: 'fd' };
     out.fd.odds = true;

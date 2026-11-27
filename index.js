@@ -50,7 +50,7 @@ const league = (s) => { must(SLUG.test(s) && L.BY[s], 404, 'Bilinmeyen lig'); re
 const openLeague = (s) => { league(s); must(L.BY[s].available, 404, 'Bu lig için veri yok'); return s; };
 const id = (s) => { must(ID.test(s), 400, 'Geçersiz kimlik'); return s; };
 
-route(/^\/api\/health$/, async () => ({ data: { ok: true, uptime: Math.round(process.uptime()), espn: E.stats, search: { players: S.searchIdx.items.length, building: S.searchIdx.building }, leagues: L.AVAILABLE.length, fd: require('./fdata').status() } }));
+route(/^\/api\/health$/, async () => ({ data: { ok: true, uptime: Math.round(process.uptime()), espn: E.stats, search: { players: S.searchIdx.items.length, building: S.searchIdx.building }, leagues: L.AVAILABLE.length, fd: require('./fdata').status(), odds: require('./oddsmove').status() } }));
 
 route(/^\/api\/matches\/(\d{8})\/([^/]+)$/, async ([, date, lg], q) => {
   if (lg !== 'all') league(lg);
@@ -120,6 +120,8 @@ route(/^\/api\/results$/, async (_m, q) => {
   return { data: await S.resultsFor(ids) };
 });
 route(/^\/api\/measure-summary$/, async (_m, q) => ({ data: S.measureSummary(q.get('run')) }));
+route(/^\/api\/odds-move\/([^/]+)\/([^/]+)$/, async ([, lg, mid], q) => ({ data: await S.oddsMoveFor(openLeague(lg), id(mid), { fresh: q.get('refresh') === '1' }) }));
+route(/^\/api\/h2h\/([^/]+)\/([^/]+)$/, async ([, lg, mid]) => ({ data: await S.h2hFor(openLeague(lg), id(mid)) }));
 route(/^\/api\/predict-adj\/([^/]+)\/([^/]+)$/, async ([, lg, mid]) => ({ data: await S.predictAdj(openLeague(lg), id(mid)) }));
 
 route(/^\/api\/backtest\/([^/]+)$/, async ([, lg]) => ({ data: await S.backtestLeague(openLeague(lg)) }));
@@ -203,6 +205,7 @@ process.on('unhandledRejection', (e) => U.log('işlenmeyen söz hatası:', e && 
 
 server.listen(PORT, '0.0.0.0', () => {
   U.log(`Maç Analiz hazır: http://localhost:${PORT}  (${L.AVAILABLE.length} açık lig, veri klasörü: ${U.DATA_DIR})`);
+  if (process.env.WARM !== '0') require('./oddsmove').start((lg, mid) => S.matchRecord(lg, mid, { bg: true })); // yaklaşan maçların oranını periyodik kaydet
   if (process.env.WARM !== '0') setTimeout(() => { if (!S.searchIdx.lastTry) S.startIndex(); }, 5000); // oyuncu arama dizinini arka planda kur
 });
 

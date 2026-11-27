@@ -1,5 +1,5 @@
-/* Maç Analiz: çevrimdışı önbellek. Sürüm: index-5ocVsbWU.js */
-const BUILD = 'index-5ocVsbWU.js';
+/* Maç Analiz: çevrimdışı önbellek. Sürüm: index-SHcq17XF.js */
+const BUILD = 'index-SHcq17XF.js';
 const SHELL = 'shell-' + BUILD;
 const API = 'api-v1';
 
